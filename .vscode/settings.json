@@ -1,0 +1,5 @@
+{
+    "eslint.codeActionsOnSave.options": {
+        "source.fixAll.eslint": "always"
+    }
+}
