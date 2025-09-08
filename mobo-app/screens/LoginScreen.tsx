@@ -100,38 +100,38 @@ export default function LoginScreen() {
               </>
             ) : (
               <>
-<View style={{ marginBottom: 12 }}>
-  <Controller
-    control={regControl}
-    name="name"
-    rules={{ required: "Full name required" }}
-    render={({ field: { onChange, value } }) => (
-      <TextInput
-        style={styles.input}
-        placeholder="Full name"
-        value={value}
-        onChangeText={onChange}
-      />
-    )}
-  />
-</View>
+                <View style={{ marginBottom: 12 }}>
+                  <Controller
+                    control={regControl}
+                    name="name"
+                    rules={{ required: "Full name required" }}
+                    render={({ field: { onChange, value } }) => (
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Full name"
+                        value={value}
+                        onChangeText={onChange}
+                      />
+                    )}
+                  />
+                </View>
 
-<View style={{ marginBottom: 12 }}>
-  <Controller
-    control={regControl}
-    name="email"
-    rules={{ required: "Email required" }}
-    render={({ field: { onChange, value } }) => (
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        autoCapitalize="none"
-        value={value}
-        onChangeText={onChange}
-      />
-    )}
-  />
-</View>
+                <View style={{ marginBottom: 12 }}>
+                  <Controller
+                    control={regControl}
+                    name="email"
+                    rules={{ required: "Email required" }}
+                    render={({ field: { onChange, value } }) => (
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Email"
+                        autoCapitalize="none"
+                        value={value}
+                        onChangeText={onChange}
+                      />
+                    )}
+                  />
+                </View>
 
                 <Controller control={regControl} name="password" rules={{ required: "Password required" }} render={({ field: { onChange, value } }) => <TextInput style={styles.input} placeholder="Password" secureTextEntry value={value} onChangeText={onChange} />} />
                 <Controller control={regControl} name="confirmPassword" rules={{ required: "Confirm password", validate: (v) => v === passwordValue || "Passwords do not match" }} render={({ field: { onChange, value } }) => <TextInput style={styles.input} placeholder="Confirm password" secureTextEntry value={value} onChangeText={onChange} />} />

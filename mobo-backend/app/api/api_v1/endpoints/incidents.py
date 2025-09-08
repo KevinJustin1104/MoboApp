@@ -1,5 +1,6 @@
 # app/api/api_v1/endpoints/incidents.py
 import pathlib
+from app import deps
 from fastapi import (
     APIRouter,
     Depends,
@@ -9,12 +10,13 @@ from fastapi import (
     Request,
     UploadFile,
     status,
+    Body,
+    Query
 )
 import uuid
 from sqlalchemy.orm import Session
 from typing import Any, List, Optional
 import os, shutil
-from app import crud, schemas
 from app.db.session import get_db_session
 from app.deps import get_current_user, get_current_admin
 from datetime import datetime
@@ -205,12 +207,32 @@ def my_incidents(
 @router.get("/admin/all", response_model=List[schemas.IncidentOut])
 def all_incidents(
     db: Session = Depends(get_db_session),
-    admin=Depends(get_current_admin),
-    skip: int = 0,
-    limit: int = 100,
+    current_user: models.User = Depends(deps.get_current_user),  # <-- use current user
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
 ):
-    return crud.list_incidents_all(db, skip=skip, limit=limit)
+    role_name = (getattr(getattr(current_user, "role", None), "name", None) or "").lower()
 
+    if role_name == "admin":
+        # admins see everything
+        return crud.list_incidents_all(db, skip=skip, limit=limit, department_id=None)
+
+    if role_name == "staff":
+        # staff must be assigned to a department
+        if current_user.department_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Staff user has no department assigned."
+            )
+        return crud.list_incidents_all(
+            db, skip=skip, limit=limit, department_id=current_user.department_id
+        )
+
+    # others are forbidden
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You don't have permission to view incidents."
+    )
 
 # file: your router (where you had the endpoint)
 @router.put("/admin/{incident_id}/status", response_model=schemas.IncidentOut)

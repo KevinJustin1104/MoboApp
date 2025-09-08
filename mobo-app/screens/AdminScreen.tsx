@@ -133,7 +133,7 @@ export default function AdminScreen() {
     <TouchableOpacity
       style={styles.card}
       activeOpacity={0.85}
-      onPress={() => navigation.navigate("AdminCategoryIncidents")}
+      onPress={() => navigation.navigate("AdminCreateDepartmentStaff")}
     >
     <View style={styles.cardRow}>
         <Ionicons name="person-add-outline" size={28} color="#0369a1" />

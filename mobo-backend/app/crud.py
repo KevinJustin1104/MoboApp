@@ -1,14 +1,17 @@
 # app/crud.py
+from http.client import HTTPException
+from operator import or_
 import os
 from pathlib import Path
+from sqlite3 import IntegrityError
 import uuid
 from sqlalchemy.orm import Session, joinedload
 from app import models, schemas
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from app.core.security import hash_password
 import base64
-
+from sqlalchemy import func, or_    
 
 # Users
 def create_user(
@@ -381,16 +384,24 @@ def image_to_base64(file_path: str) -> str:
         print("Error encoding image:", e)
         return ""
 
-def list_incidents_all(db: Session, skip: int = 0, limit: int = 100) -> List[Dict]:
+def list_incidents_all(
+    db: Session,
+    skip: int = 0,
+    limit: int = 100,
+    department_id: Optional[int] = None,   # <--- NEW
+) -> List[Dict]:
+    q = db.query(models.Incident)
+    if department_id is not None:
+        q = q.filter(models.Incident.department == department_id)
+
     incidents = (
-        db.query(models.Incident)
-        .order_by(models.Incident.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
+        q.order_by(models.Incident.created_at.desc())
+         .offset(skip)
+         .limit(limit)
+         .all()
     )
 
-    # Collect reporter_ids and prefetch users to avoid N+1 queries
+    # (rest of your function unchanged) ...
     reporter_ids = {inc.reporter_id for inc in incidents if getattr(inc, "reporter_id", None)}
     users_by_id = {}
     if reporter_ids:
@@ -399,19 +410,16 @@ def list_incidents_all(db: Session, skip: int = 0, limit: int = 100) -> List[Dic
 
     result = []
     for inc in incidents:
-        # --- category name ---
         type_name = None
         if getattr(inc, "incident_type", None):
             cat = db.query(models.IncidentCategory).filter_by(id=inc.incident_type).first()
             type_name = cat.name if cat else None
 
-        # --- department name ---
         department_name = None
         if getattr(inc, "department", None):
             dept = db.query(models.Department).filter_by(id=inc.department).first()
             department_name = dept.name if dept else None
 
-        # --- collect photos for this incident ---
         photo_b64_list = []
         for p in getattr(inc, "photos", []) or []:
             try:
@@ -420,26 +428,20 @@ def list_incidents_all(db: Session, skip: int = 0, limit: int = 100) -> List[Dic
                     or getattr(p, "file_path", None)
                     or getattr(p, "url", None)
                 )
-
                 if storage_path:
                     fp = Path(storage_path)
                     if not fp.exists():
                         candidate = Path(os.getcwd()) / "uploads" / fp.name
                         if candidate.exists():
                             fp = candidate
-
                     if fp.exists():
                         with open(fp, "rb") as f:
                             encoded = base64.b64encode(f.read()).decode("utf-8")
                             photo_b64_list.append(f"data:image/jpeg;base64,{encoded}")
-                    else:
-                        print(f"[list_incidents_all] photo file not found for incident {inc.id}: {storage_path}")
-                else:
-                    print(f"[list_incidents_all] no storage path/url for photo on incident {inc.id}")
+                # else: silently skip
             except Exception as e:
                 print(f"[list_incidents_all] Failed to process photo for incident {inc.id}: {e}")
 
-        # --- reporter name / phone: prefer user lookup, fallback to incident fields ---
         reporter_name = None
         reporter_phone = None
         if getattr(inc, "reporter_id", None):
@@ -448,7 +450,6 @@ def list_incidents_all(db: Session, skip: int = 0, limit: int = 100) -> List[Dic
                 reporter_name = user.name
                 reporter_phone = user.phone
 
-        # fallback: in case you previously stored reporter_name on incident
         if not reporter_name:
             reporter_name = getattr(inc, "reporter_name", None)
         if not reporter_phone:
@@ -479,7 +480,6 @@ def list_incidents_all(db: Session, skip: int = 0, limit: int = 100) -> List[Dic
         )
 
     return result
-
 
 def get_incident_category(db: Session, category_id: int) -> Optional[models.IncidentCategory]:
     return db.query(models.IncidentCategory).filter(models.IncidentCategory.id == category_id).first()
@@ -516,3 +516,88 @@ def delete_incident_category(db: Session, category_id: int) -> bool:
     db.delete(cat)
     db.commit()
     return True
+
+
+def _get_or_create_role(db: Session, name: str) -> models.Role:
+    role = db.query(models.Role).filter(models.Role.name == name).first()
+    if role:
+        return role
+    role = models.Role(name=name)
+    db.add(role)
+    db.flush()
+    return role
+
+def create_staff_for_department(
+    db: Session, department_id: int, payload: schemas.StaffCreate
+) -> models.User:
+    dept = db.query(models.Department).filter(models.Department.id == department_id).first()
+    if not dept:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found")
+
+    existing = db.query(models.User).filter(models.User.email == payload.email).first()
+    if existing:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use")
+
+    role_user = _get_or_create_role(db, "user")
+
+    user = models.User(
+        name=payload.name,
+        email=payload.email,
+        phone=payload.phone,
+        password=hash_password(payload.password),  # store HASH
+        role_id=role_user.id,
+        department_id=dept.id,
+        is_active=True,
+    )
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise
+    db.refresh(user)
+    return user
+
+def list_staff(
+    db: Session,
+    q: Optional[str] = None,
+    department_id: Optional[int] = None,
+    limit: int = 50,
+    offset: int = 0,
+    sort: str = "-created",                         # "-created" or "created"
+    role_names: Optional[List[str]] = None,         # <--- accept multiple roles
+) -> Tuple[List[Tuple[models.User, Optional[str]]], int]:
+    base = (
+        db.query(models.User, models.Department.name.label("department_name"))
+        .outerjoin(models.Department, models.User.department_id == models.Department.id)
+        .outerjoin(models.Role, models.User.role_id == models.Role.id)
+    )
+
+    # Filter by roles, if provided
+    if role_names:
+        lowered = [r.lower() for r in role_names]
+        base = base.filter(func.lower(models.Role.name).in_(lowered))
+
+    if department_id:
+        base = base.filter(models.User.department_id == department_id)
+
+    if q:
+        like = f"%{q}%"
+        base = base.filter(
+            or_(
+                models.User.name.ilike(like),
+                models.User.email.ilike(like),
+                models.Department.name.ilike(like),
+            )
+        )
+
+    ordered = base.order_by(
+        models.User.created_at.asc() if sort == "created" else models.User.created_at.desc()
+    )
+
+    # Accurate total with joins: count distinct users after filters
+    subq = base.with_entities(models.User.id).distinct().subquery()
+    total = db.query(func.count()).select_from(subq).scalar() or 0
+
+    rows = ordered.limit(limit).offset(offset).all()
+    return rows, total

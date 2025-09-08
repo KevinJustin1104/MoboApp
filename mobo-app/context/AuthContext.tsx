@@ -5,7 +5,7 @@ import client from "../services/api";
 type AuthContextType = { 
   isLoading: boolean; 
   userToken: string | null; 
-  userRole: "admin" | "user" | null; 
+  userRole: "admin" | "user" | "staff" | null; 
   signIn: (email: string, password: string) => Promise<void>; 
   signOut: () => void; 
 }; 
@@ -19,7 +19,7 @@ export const AuthContext = createContext<AuthContextType>({
 export const AuthProvider = ({ children }: { children: ReactNode }) => { 
   const [isLoading, setIsLoading] = useState(false); 
   const [userToken, setUserToken] = useState<string | null>(null); 
-  const [userRole, setUserRole] = useState<"admin" | "user" | null>(null); 
+  const [userRole, setUserRole] = useState<"admin" | "user" | "staff" | null>(null); 
   // Check if token exists on app start 
   useEffect(() => { 
     const loadToken = async () => { 
@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // 🔎 Fetch user profile to get role 
         try { 
           const res = await client.get("/users/me"); 
-          setUserRole(res.data.role?.name === "admin" ? "admin" : "user"); 
+          setUserRole(res.data.role?.name); 
         } catch { 
           // if token invalid, clear it 
           setUserToken(null); setUserRole(null); 
@@ -47,7 +47,7 @@ const signIn = async (email: string, password: string) => {
     setUserToken(access_token); 
     // fetch role from backend 
     const res = await client.get("/users/me"); 
-    setUserRole(res.data.role?.name === "admin" ? "admin" : "user"); 
+    setUserRole(res.data.role?.name); 
   } catch (err) { 
     alert("Invalid email or password"); 
   } finally { 

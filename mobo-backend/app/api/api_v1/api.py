@@ -8,6 +8,7 @@ from app.api.api_v1.endpoints import (
     profile,
     departments,
     incident_categories,
+    admin_staff
 )
 
 api_router = APIRouter()
@@ -29,3 +30,4 @@ api_router.include_router(
     prefix="/incident_categories",
     tags=["incident_categories"],
 )
+api_router.include_router(admin_staff.router)

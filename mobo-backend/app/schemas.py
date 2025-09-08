@@ -151,3 +151,27 @@ class IncidentStatusUpdate(BaseModel):
     new_status: str
     comment: str | None = None
     departmentId: Optional[int] = None
+
+
+class StaffCreate(BaseModel):
+    name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    password: str
+
+class UserWithDeptOut(BaseModel):
+    id: str
+    name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    department_id: Optional[int] = None
+    department_name: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+
+    class Config:
+        from_attributes = True  # SQLAlchemy -> Pydantic
+
+class StaffListResponse(BaseModel):
+    items: List[UserWithDeptOut]
+    total: int

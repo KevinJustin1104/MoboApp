@@ -18,6 +18,7 @@ import AdminUsersScreen from "../screens/AdminUsersScreen";
 import AdminDepartmentScreen from "../screens/AdminDepartmentScreen";
 import AdminCategoryIncidentsScreen from "../screens/AdminCategoryIncidentsScreen";
 import AdminIncidentDetailScreen from "../screens/AdminIncidentDetailScreen";
+import AdminCreateDepartmentStaff from "../screens/AdminCreateDepartmentStaff";
 
 export type RootStackParamList = {
   Login: undefined;
@@ -34,6 +35,7 @@ export type RootStackParamList = {
   AdminUsers: undefined;
   AdminDepartment: undefined;
   AdminCategoryIncidents: undefined;
+  AdminCreateDepartmentStaff: undefined;
   IncidentStatus: { notificationId: string };
 };
 
@@ -41,7 +43,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigation() {
   const { isLoading, userToken, userRole } = useContext(AuthContext);
-
+  console.log('userRole: ', userRole)
   if (isLoading) return null;
 
   // unauthenticated
@@ -54,8 +56,8 @@ export default function RootNavigation() {
     );
   }
 
-  // admin
-  if (userRole === "admin") {
+  // admin or staff
+  if (["admin", "staff"].includes(userRole ?? "")) {
     return (
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Admin" component={AdminScreen} />
@@ -64,6 +66,7 @@ export default function RootNavigation() {
         <Stack.Screen name="AdminUsers" component={AdminUsersScreen} />
         <Stack.Screen name="AdminDepartment" component={AdminDepartmentScreen} />
         <Stack.Screen name="AdminCategoryIncidents" component={AdminCategoryIncidentsScreen} />
+          <Stack.Screen name="AdminCreateDepartmentStaff" component={AdminCreateDepartmentStaff} />
       </Stack.Navigator>
     );
   }
