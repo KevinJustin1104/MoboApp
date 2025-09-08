@@ -23,12 +23,14 @@ from datetime import datetime
 from app import crud, schemas, models
 import base64
 from pathlib import Path
-
+from sqlalchemy import inspect as sa_inspect
 router = APIRouter()
 
 UPLOAD_DIR = "uploads/incidents"
 BASE_URL = "http://localhost:8081"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
 
 
 @router.post("/create", response_model=schemas.IncidentOut)
@@ -39,7 +41,7 @@ async def create_incident(
     description: Optional[str] = Form(None),
     address: Optional[str] = Form(None),
     purok: Optional[str] = Form(None),
-    barangay: Optional[str] = Form(None),
+    barangay: Optional[int] = Form(None),
     street: Optional[str] = Form(None),
     landmark: Optional[str] = Form(None),
     department_id: Optional[int] = Form(None),
@@ -53,14 +55,18 @@ async def create_incident(
         cat = db.query(models.IncidentCategory).filter_by(id=category_id).first()
         if cat:
             department_to_assign = cat.department_id
-
+    barangay_id_assign = barangay
+    if barangay and not barangay:
+        brgy = db.query(models.Barangay).filter_by(id=barangay_id_assign).first()
+        if brgy:
+            barangay_id_assign = brgy.id
     inc_in = schemas.IncidentCreate(
         title=title,
         type=category_id,
         description=description,
         address=address,
         purok=purok,
-        barangay=barangay,
+        barangay=barangay_id_assign,
         street=street,
         landmark=landmark,
         department_id=department_to_assign,
@@ -202,7 +208,6 @@ def my_incidents(
 ):
     return crud.list_incidents_for_user(db, current_user.id, skip=skip, limit=limit)
 
-
 # Admin: list all incidents ordered by date
 @router.get("/admin/all", response_model=List[schemas.IncidentOut])
 def all_incidents(
@@ -242,6 +247,7 @@ def update_status(
     db: Session = Depends(get_db_session),
     admin=Depends(get_current_admin),
 ) -> Any:
+    print("admin user:", admin.id, getattr(admin, "name", None), admin)
     # update incident (pass departmentId through)
     updated = crud.update_incident_status(
         db,
@@ -253,7 +259,7 @@ def update_status(
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Incident not found")
-
+    print("Updated incident:", updated)
     # create notification
     try:
         crud.create_notification(
@@ -262,8 +268,135 @@ def update_status(
             incident_id=updated["id"],  # use incident id
             message=payload.comment or "",
         )
+
     except Exception:
         print("[update_status] Failed to create notification")
         db.rollback()
 
     return updated
+
+# Reuse this if you already added a creator helper earlier
+def _comment_text_key() -> str:
+    # Works with your current model ("comment")
+    mapper = sa_inspect(models.IncidentComment)
+    cols = set(mapper.columns.keys())
+    for k in ("message", "content", "body", "text", "comment", "note"):
+        if k in cols:
+            return k
+    raise HTTPException(status_code=500, detail="IncidentComment has no text column.")
+
+@router.get("/{incident_id}/comments", response_model=List[schemas.IncidentCommentOut])
+def list_comments(
+    incident_id: str,
+    db: Session = Depends(get_db_session),
+    current_user: models.User = Depends(deps.get_current_user),
+):
+    # ensure incident exists
+    inc = db.query(models.Incident).filter(models.Incident.id == incident_id).first()
+    if not inc:
+        raise HTTPException(404, "Incident not found")
+
+    # permission: admin OK; staff only if same department; reporter OK
+    role = (getattr(getattr(current_user, "role", None), "name", None) or "").lower()
+    if role == "admin":
+        pass
+    elif role == "staff":
+        if current_user.department_id != inc.department:
+            raise HTTPException(403, "Not allowed for this department.")
+    else:
+        if current_user.id != inc.reporter_id:
+            raise HTTPException(403, "Not allowed")
+
+    text_key = _comment_text_key()
+
+    # join user to get author name, order oldest->newest
+    rows = (
+        db.query(models.IncidentComment, models.User.name.label("author_name"))
+        .outerjoin(models.User, models.IncidentComment.author_id == models.User.id)
+        .filter(models.IncidentComment.incident_id == incident_id)
+        .order_by(models.IncidentComment.created_at.asc())
+        .all()
+    )
+
+    out: List[schemas.IncidentCommentOut] = []
+    for c, author_name in rows:
+        msg = getattr(c, text_key, None) or ""
+        out.append(
+            schemas.IncidentCommentOut(
+                id=c.id,
+                incident_id=c.incident_id,
+                author_id=getattr(c, "author_id", None),
+                author_name=author_name,
+                comment=msg,
+                created_at=getattr(c, "created_at", None).isoformat() if getattr(c, "created_at", None) else None,
+            )
+        )
+    return out
+
+
+@router.post(
+    "/{incident_id}/re/comments",
+    response_model=schemas.IncidentCommentOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a comment / follow-up to an incident",
+)
+def post_comment(
+    incident_id: str,
+    payload: schemas.IncidentCommentCreate,
+    db: Session = Depends(get_db_session),
+    current_user: models.User = Depends(deps.get_current_user),
+):
+    # 1) incident exists?
+    inc = db.query(models.Incident).filter(models.Incident.id == incident_id).first()
+    if not inc:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    # 2) permission: admin OK; staff must match dept; reporter OK
+    role = (getattr(getattr(current_user, "role", None), "name", None) or "").lower()
+    if role == "admin":
+        pass
+    elif role == "staff":
+        if current_user.department_id != inc.department:
+            raise HTTPException(status_code=403, detail="Not allowed for this department")
+    else:
+        if current_user.id != inc.reporter_id:
+            raise HTTPException(status_code=403, detail="Not allowed")
+
+    # 3) validate
+    msg = (payload.comment or "").strip()
+    if not msg:
+        raise HTTPException(status_code=422, detail="Comment is required")
+
+    # 4) insert (column name is "comment" in your model)
+    text_key = _comment_text_key()  # will return "comment" for your model
+    c = models.IncidentComment(
+        incident_id=incident_id,
+        author_id=current_user.id,
+        **{text_key: msg},
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+
+    # 5) author name (optional join avoided here for speed)
+    author_name = getattr(current_user, "name", None)
+    # create notification
+    try:
+        crud.create_notification(
+            db,
+            user_id=inc.reporter_id,  # use reporter_id from the updated dict
+            incident_id=incident_id,  # use incident id
+            message=payload.comment or "",
+        )
+
+    except Exception:
+        print("[update_status] Failed to create notification")
+        db.rollback()
+    return schemas.IncidentCommentOut(
+        id=str(c.id),
+        incident_id=str(c.incident_id),
+        author_id=str(c.author_id) if c.author_id else None,
+        author_name=author_name,
+        comment=getattr(c, text_key, ""),
+        created_at=c.created_at.isoformat() if getattr(c, "created_at", None) else None,
+    )

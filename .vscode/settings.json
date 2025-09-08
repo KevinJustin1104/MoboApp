@@ -1,5 +1,9 @@
 {
     "eslint.codeActionsOnSave.options": {
         "source.fixAll.eslint": "always"
-    }
+    },
+    "python.analysis.extraPaths": [
+        "./mobo-backend",
+        "./mobo-backend"
+    ]
 }

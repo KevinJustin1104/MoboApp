@@ -1,5 +1,5 @@
 // src/screens/HomeScreen.tsx
-import React, { useContext, useMemo, useCallback, useState } from "react";
+import React, { useContext, useMemo, useCallback, useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Platform,
   AccessibilityInfo,
   ActivityIndicator,
+  AppState, // 👈 added
 } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -18,24 +19,38 @@ import { AuthContext } from "../context/AuthContext";
 import { RootStackParamList } from "../navigation";
 import { getUnreadCount } from "../services/notifications";
 import { getLatestAnnouncements, Announcement } from "../services/announcements";
+import { getUnreadAlertsCount } from "../services/alert";
+import { useTranslation } from "react-i18next";
 
 type HomeNavProp = NativeStackNavigationProp<RootStackParamList, "Home">;
 
 export default function HomeScreen() {
   const navigation = useNavigation<HomeNavProp>();
-  const { userToken, signOut } = useContext(AuthContext);
+  const { signOut } = useContext(AuthContext);
+  const { t } = useTranslation();
 
-  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [unreadNotifCount, setUnreadNotifCount] = useState<number>(0);
+  const [unreadAlerts, setUnreadAlerts] = useState<number>(0);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(false);
 
   const fetchUnread = useCallback(async () => {
     try {
       const count = await getUnreadCount();
-      setUnreadCount(count);
+      setUnreadNotifCount(count);
     } catch (err) {
-      console.warn("Failed to fetch unread count", err);
-      setUnreadCount(0);
+      console.warn("Failed to fetch unread notifications", err);
+      setUnreadNotifCount(0);
+    }
+  }, []);
+
+  const fetchAlertsUnread = useCallback(async () => {
+    try {
+      const n = await getUnreadAlertsCount();
+      setUnreadAlerts(n);
+    } catch (e) {
+      console.warn("Failed to fetch unread alerts", e);
+      setUnreadAlerts(0);
     }
   }, []);
 
@@ -52,46 +67,139 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // refresh when screen focuses
+  // Existing: refresh when screen is focused
   useFocusEffect(
     useCallback(() => {
       fetchUnread();
+      fetchAlertsUnread();
       fetchAnnouncements();
-    }, [fetchUnread, fetchAnnouncements])
+    }, [fetchUnread, fetchAlertsUnread, fetchAnnouncements])
   );
+
+  // NEW: Live auto-refresh loop (no manual refresh needed)
+  useEffect(() => {
+    let stopped = false;
+    let timer: any;
+
+    const tick = async () => {
+      if (stopped) return;
+      // Run both requests in parallel
+      try {
+        const [notif, alerts] = await Promise.all([
+          getUnreadCount().catch(() => 0),
+          getUnreadAlertsCount().catch(() => 0),
+        ]);
+        if (!stopped) {
+          setUnreadNotifCount(notif);
+          setUnreadAlerts(alerts);
+        }
+      } catch {
+        // ignore errors; next loop will try again
+      }
+    };
+
+    const schedule = () => {
+      const hidden = typeof document !== "undefined" && (document as any).hidden;
+      const next = hidden ? 60_000 : 30_000; // slow down when backgrounded on web
+      timer = setTimeout(loop, next);
+    };
+
+    const loop = async () => {
+      await tick();
+      if (!stopped) schedule();
+    };
+
+    // Start immediately
+    loop();
+
+    // Refresh when tab gains focus (web)
+    const onWindowFocus = () => tick();
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", onWindowFocus);
+    }
+
+    // Refresh when tab visibility changes to visible (web)
+    const onVisibility = () => {
+      if (typeof document !== "undefined" && !(document as any).hidden) {
+        tick();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibility);
+    }
+
+    // Refresh when app returns to foreground (native)
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") tick();
+    });
+
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", onWindowFocus);
+      }
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
+      // @ts-ignore RN types: remove() exists on the subscription
+      appStateSub?.remove?.();
+    };
+  }, []);
 
   const actions = useMemo(
     () => [
       {
+        id: "sos",
+        label: t("common.sosHotlines"),
+        icon: "call" as const,
+        onPress: () => navigation.navigate("SOSHotlines" as never),
+        color: "#e6f2ff",
+      },
+      {
         id: "report",
-        label: "Report Incident",
+        label: t("common.reportIncident"),
         icon: "warning-outline" as const,
         onPress: () => navigation.navigate("IncidentReport"),
         color: "#ffe8e8",
       },
       {
+        id: "alerts",
+        label: t("common.realTimeAlerts"),
+        icon: "radio-outline" as const,
+        onPress: () => navigation.navigate("Alerts" as never),
+        color: "#e8fff7",
+      },
+      {
         id: "notifications",
-        label: "Notifications",
+        label: t("common.notifications"),
         icon: "notifications-outline" as const,
         onPress: () => navigation.navigate("Notifications"),
         color: "#e8f0ff",
       },
       {
         id: "announcements",
-        label: "Announcements",
+        label: t("common.announcements"),
         icon: "megaphone-outline" as const,
         onPress: () => navigation.navigate("Announcements"),
         color: "#e9fbea",
       },
       {
         id: "profile",
-        label: "Profile",
+        label: t("common.profile"),
         icon: "person-circle-outline" as const,
         onPress: () => navigation.navigate("Profile"),
         color: "#fff7e8",
       },
+      {
+        id: "settings",
+        label: t("common.settings"),
+        icon: "settings-outline" as const,
+        onPress: () => navigation.navigate("SettingsLanguage" as never),
+        color: "#f1f5f9",
+      },
     ],
-    [navigation]
+    [navigation, t]
   );
 
   return (
@@ -101,14 +209,13 @@ export default function HomeScreen() {
         <View style={styles.headerLeft}>
           <View style={styles.avatarWrapper} accessible accessibilityLabel="User avatar">
             <Image
-              source={{
-                uri: "https://placehold.co/56x56/1E40AF/ffffff?text=U",
-              }}
+              source={{ uri: "https://placehold.co/56x56/1E40AF/ffffff?text=U" }}
               style={styles.avatar}
+              resizeMode="cover" // 👈 move resizeMode to prop to avoid RN Web warning
             />
           </View>
           <View style={{ marginLeft: 12 }}>
-            <Text style={styles.greeting}>Welcome back</Text>
+            <Text style={styles.greeting}>{t("home.welcomeBack", "Welcome back")}</Text>
             <Text style={styles.username}>Mobo Resident</Text>
           </View>
         </View>
@@ -118,12 +225,12 @@ export default function HomeScreen() {
             style={styles.iconButton}
             onPress={() => navigation.navigate("Notifications")}
             accessibilityRole="button"
-            accessibilityLabel="Open notifications"
+            accessibilityLabel={t("common.openNotifications")}
           >
             <Ionicons name="notifications-outline" size={26} color="#1e40af" />
-            {unreadCount > 0 ? (
+            {unreadNotifCount > 0 ? (
               <View style={styles.badge}>
-                <Text style={styles.badgeText}>{unreadCount > 99 ? "99+" : String(unreadCount)}</Text>
+                <Text style={styles.badgeText}>{unreadNotifCount > 99 ? "99+" : String(unreadNotifCount)}</Text>
               </View>
             ) : null}
           </TouchableOpacity>
@@ -149,6 +256,11 @@ export default function HomeScreen() {
             >
               <View style={styles.cardIcon}>
                 <Ionicons name={a.icon} size={26} color="#1e40af" />
+                {a.id === "alerts" && unreadAlerts > 0 ? (
+                  <View style={styles.smallBadge}>
+                    <Text style={styles.smallBadgeText}>{unreadAlerts > 99 ? "99+" : String(unreadAlerts)}</Text>
+                  </View>
+                ) : null}
               </View>
               <Text style={styles.cardLabel}>{a.label}</Text>
             </TouchableOpacity>
@@ -156,7 +268,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Latest Updates</Text>
+          <Text style={styles.sectionTitle}>{t("common.latestUpdates")}</Text>
 
           {loadingAnnouncements ? (
             <View style={[styles.placeholderCard, { alignItems: "center" }]}>
@@ -164,22 +276,22 @@ export default function HomeScreen() {
             </View>
           ) : announcements.length === 0 ? (
             <View style={styles.placeholderCard}>
-              <Text style={styles.placeholderTitle}>No updates yet</Text>
-              <Text style={styles.placeholderSubtitle}>
-                Once announcements are published, you'll see them here.
-              </Text>
+              <Text style={styles.placeholderTitle}>{t("common.noUpdatesTitle")}</Text>
+              <Text style={styles.placeholderSubtitle}>{t("common.noUpdatesSub")}</Text>
             </View>
           ) : (
             announcements.slice(0, 3).map((a) => (
               <TouchableOpacity
                 key={a.id}
                 style={[styles.placeholderCard, { marginBottom: 10 }]}
-                onPress={() => navigation.navigate("AnnouncementDetail", { announcementId: a.id })}
+                onPress={() => navigation.navigate("AnnouncementDetail", { announcementId: a.id } as any)}
                 activeOpacity={0.85}
               >
                 <Text style={{ fontWeight: "700", fontSize: 15, marginBottom: 6 }}>{a.title}</Text>
                 {a.body ? <Text numberOfLines={2} style={{ color: "#6b7280" }}>{a.body}</Text> : null}
-                <Text style={{ color: "#9ca3af", fontSize: 12, marginTop: 8 }}>{new Date(a.created_at).toLocaleString()}</Text>
+                <Text style={{ color: "#9ca3af", fontSize: 12, marginTop: 8 }}>
+                  {new Date(a.created_at).toLocaleString()}
+                </Text>
               </TouchableOpacity>
             ))
           )}
@@ -193,10 +305,10 @@ export default function HomeScreen() {
               signOut();
             }}
             accessibilityRole="button"
-            accessibilityLabel="Logout"
+            accessibilityLabel={t("common.logout")}
           >
             <Ionicons name="log-out-outline" size={20} color="#dc2626" />
-            <Text style={styles.logoutText}>Logout</Text>
+            <Text style={styles.logoutText}>{t("common.logout")}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -206,17 +318,16 @@ export default function HomeScreen() {
         onPress={() => navigation.navigate("IncidentReport")}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel="Report an incident"
+        accessibilityLabel={t("common.reportIncidentA11y")}
       >
         <Ionicons name="warning" size={22} color="#fff" />
-        <Text style={styles.fabText}>Report</Text>
+        <Text style={styles.fabText}>{t("common.report")}</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  /* (same style definitions as you already have) */
   screen: { flex: 1, backgroundColor: "#f6f8fb" },
   header: {
     paddingTop: Platform.OS === "ios" ? 56 : 36,
@@ -238,7 +349,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  avatar: { width: 56, height: 56, resizeMode: "cover" },
+  // You can remove resizeMode here to silence RN Web warning
+  avatar: { width: 56, height: 56 /*, resizeMode: "cover"*/ },
   greeting: { fontSize: 12, color: "#6b7280" },
   username: { fontSize: 16, color: "#0f172a", fontWeight: "600" },
 
@@ -287,7 +399,6 @@ const styles = StyleSheet.create({
   bannerSubtitle: { color: "#6b7280", fontSize: 13 },
 
   content: { paddingHorizontal: 16, paddingBottom: 120 },
-
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -319,6 +430,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
+  smallBadge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    borderRadius: 8,
+    backgroundColor: "#ef4444",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  smallBadgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
+
   cardLabel: { fontSize: 14, fontWeight: "600", color: "#0f172a" },
 
   section: { marginTop: 8 },

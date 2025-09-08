@@ -3,6 +3,15 @@ import client from "./api";
 import { getToken } from "../storage/secureStore";
 const BASE = "http://127.0.0.1:8000/api/v1";
 
+export type IncidentComment = {
+  id?: number;
+  incident_id?: string;
+  author_id?: string;
+  author_name?: string;
+  comment: string;
+  created_at?: string;
+};
+
 type IncidentCreatePayload = {
   title: string;
   description: string;
@@ -70,6 +79,17 @@ export async function getIncident(incidentId: string) {
   return res.data;
 }
 
+export async function fetchIncidentComments(incidentId: string): Promise<IncidentComment[]> {
+  const { data } = await client.get(`/incidents/${incidentId}/comments`);
+  return data ?? [];
+}
+
+export async function postIncidentComment(incidentId: string, comment: string) {
+  const { data } = await client.post(`/incidents/${incidentId}/re/comments`, { comment }, {
+    headers: { "Content-Type": "application/json" },
+  });
+  return data ?? { ok: true };
+}
 
 /**
  * Admin namespace — convenience grouped exports

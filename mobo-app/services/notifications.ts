@@ -1,26 +1,64 @@
-// mobo-app/services/notifications.ts
-import client from "./api";
+// services/notifications.ts
+export {
+  listNotifications,
+  markNotificationRead,
+  getUnreadCount,
+  type NotificationOut,
+} from "./notifications.api";
 
-export type NotificationOut = {
-  id: string;
-  user_id: string;
-  incident_id?: string | null;
-  message?: string | null;
-  read: boolean;
-  created_at: string;
+import { Platform } from "react-native";
+
+/** Web: ask permission explicitly on first user gesture */
+export async function requestWebNotificationPermission(): Promise<"granted" | "denied" | "default"> {
+  if (typeof window === "undefined" || !("Notification" in window)) return "denied";
+  try {
+    const res = await Notification.requestPermission();
+    console.log("[web] Notification permission =", res);
+    return res;
+  } catch {
+    return "denied";
+  }
+}
+
+// Shared surface both platforms implement
+type NotifCommon = {
+  registerForPushNotificationsAsync(): Promise<
+    import("./notifications.native").PushSetupResult |
+    import("./notifications.web").PushSetupResult
+  >;
+  startNotificationListeners(opts: {
+    onReceive?: (n: any) => void;
+    onRespond?: (r: any) => void;
+  }): () => void;
+  presentLocalAlert(opts: { title: string; body?: string; data?: any }): Promise<void>;
+  presentLocalGeneral(opts: { title: string; body?: string; data?: any }): Promise<void>;
+  // web-only, but we expose a no-op on native
+  unlockWebAudio?: () => void;
 };
 
-export async function listNotifications(): Promise<NotificationOut[]> {
-  const res = await client.get<NotificationOut[]>("/notifications");
-  return res.data ?? [];
-}
+// Pick the runtime implementation
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const mod: NotifCommon =
+  Platform.OS === "web"
+    ? require("./notifications.web")
+    : require("./notifications.native");
 
-export async function markNotificationRead(notificationId: string): Promise<NotificationOut> {
-  const res = await client.post<NotificationOut>(`/notifications/${notificationId}/read`);
-  return res.data;
-}
+export const registerForPushNotificationsAsync =
+  () => mod.registerForPushNotificationsAsync();
 
-export async function getUnreadCount(): Promise<number> {
-  const res = await client.get<{ count: number }>("/notifications/unread_count");
-  return res.data?.count ?? 0;
-}
+export const startNotificationListeners =
+  (opts: Parameters<NotifCommon["startNotificationListeners"]>[0]) =>
+    mod.startNotificationListeners(opts);
+
+export const presentLocalAlert =
+  (opts: Parameters<NotifCommon["presentLocalAlert"]>[0]) =>
+    mod.presentLocalAlert(opts);
+
+export const presentLocalGeneral =
+  (opts: Parameters<NotifCommon["presentLocalGeneral"]>[0]) =>
+    mod.presentLocalGeneral(opts);
+
+// Safe no-op on native; real on web
+export const unlockWebAudio = () => {
+  try { mod.unlockWebAudio?.(); } catch {}
+};

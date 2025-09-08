@@ -52,6 +52,61 @@ def list_users(db: Session, skip: int = 0, limit: int = 100) -> List[models.User
 
 
 # Incidents
+
+
+def incident_to_out(db: Session, inc: models.Incident) -> Dict:
+    # type name
+    type_name = None
+    if getattr(inc, "incident_type", None):
+        cat = db.query(models.IncidentCategory).filter_by(id=inc.incident_type).first()
+        type_name = cat.name if cat else None
+    # department name
+    department_name = None
+    if getattr(inc, "department", None):
+        dept = db.query(models.Department).filter_by(id=inc.department).first()
+        department_name = dept.name if dept else None
+    # photos
+    photo_b64_list = []
+    for p in getattr(inc, "photos", []) or []:
+        try:
+            storage_path = getattr(p, "storage_path", None) or getattr(p, "file_path", None) or getattr(p, "url", None)
+            if storage_path:
+                fp = Path(storage_path)
+                if not fp.exists():
+                    candidate = Path(os.getcwd()) / "uploads" / fp.name
+                    if candidate.exists(): fp = candidate
+                if fp.exists():
+                    with open(fp, "rb") as f:
+                        encoded = base64.b64encode(f.read()).decode("utf-8")
+                        photo_b64_list.append(f"data:image/jpeg;base64,{encoded}")
+        except Exception: pass
+
+    # reporter (optional)
+    reporter_name = getattr(inc, "reporter_name", None)
+    reporter_phone = getattr(inc, "reporter_phone", None)
+
+    return {
+        "id": inc.id,
+        "reporter_id": inc.reporter_id,
+        "title": inc.title,
+        "type": inc.incident_type,
+        "type_name": type_name,
+        "description": inc.description,
+        "address": inc.address,
+        "purok": inc.purok,
+        "barangay": inc.barangay,
+        "street": inc.street,
+        "landmark": inc.landmark,
+        "department": inc.department,
+        "department_name": department_name,
+        "status": (inc.status.capitalize() if inc.status else "Submitted"),
+        "created_at": inc.created_at,
+        "photos": photo_b64_list,
+        "reporterName": reporter_name,
+        "reporterPhone": reporter_phone,
+        "reportedAt": inc.created_at,
+    }
+
 def create_incident(db: Session, reporter_id: str, inc_in: schemas.IncidentCreate):
     """
     Create and persist an Incident.
@@ -193,7 +248,7 @@ def update_incident_status(
     inc = get_incident(db, incident_id)
     if not inc:
         return None
-
+    print(f"current messages: {[c.comment for c in getattr(inc, 'comments', [])]}")
     # Add comment
     if comment_text:
         comment = models.IncidentComment(

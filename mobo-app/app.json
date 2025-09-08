@@ -12,20 +12,45 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-    "ios": {
-      "supportsTablet": true
-    },
+
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
+      ],
+      "edgeToEdgeEnabled": true,
+      "notification": {
+        "icon": "./assets/notification-icon.png",
+        "color": "#0369a1"
+      }
     },
+
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSUserNotificationsUsageDescription": "We send important local alerts (weather, power, road).",
+        "UIBackgroundModes": ["remote-notification"]
+      }
+    },
+
     "web": {
       "favicon": "./assets/favicon.png"
     },
+
     "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/mobo.png",
+          "color": "#0369a1",
+          "sounds": ["./assets/notification.mp3","./assets/alert.mp3"]
+        }
+      ],
       "expo-secure-store"
     ]
   }

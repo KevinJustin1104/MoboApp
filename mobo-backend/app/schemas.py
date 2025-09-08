@@ -1,7 +1,7 @@
 # app/schemas.py
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, constr
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Literal
 
 
 # Auth
@@ -41,11 +41,21 @@ class IncidentCreate(BaseModel):
     description: Optional[str] = None
     address: Optional[str] = None
     purok: Optional[str] = None
-    barangay: Optional[str] = None
+    barangay: Optional[int] = None
     street: Optional[str] = None
     landmark: Optional[str] = None
     department_id: Optional[int] = None
 
+class IncidentCommentCreate(BaseModel):
+    comment: str
+
+class IncidentCommentOut(BaseModel):
+    id: str
+    incident_id: str
+    author_id: Optional[str] = None
+    author_name: Optional[str] = None
+    comment: str
+    created_at: Optional[str] = None
 
 class IncidentOut(BaseModel):
     id: str
@@ -71,6 +81,12 @@ class IncidentOut(BaseModel):
     class Config:
         orm_mode = True
 
+class IncidentStatusUpdate(BaseModel):
+    status: Literal["submitted","acknowledged","in_progress","resolved","rejected"]
+    note: Optional[str] = None
+
+class IncidentCommentCreate(BaseModel):
+    comment: str = Field(..., min_length=1)
 
 # Notification
 class NotificationOut(BaseModel):
@@ -175,3 +191,83 @@ class UserWithDeptOut(BaseModel):
 class StaffListResponse(BaseModel):
     items: List[UserWithDeptOut]
     total: int
+
+
+# --- Barangays --------------------------------------------------------------
+
+class BarangayCreate(BaseModel):
+    name: str
+    code: Optional[str] = None
+
+class BarangayUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+
+class BarangayOut(BaseModel):
+    id: int
+    name: str
+    code: Optional[str] = None
+
+# --- Alerts ---
+
+# ---------- Alerts ----------
+class AlertCreate(BaseModel):
+    title: str
+    body: Optional[str] = None
+    severity: Literal["info", "warning", "danger"] = "info"
+    category: Optional[str] = None
+    barangay: Optional[str] = None
+    barangay_id: Optional[int] = None   # NEW (resolved to name)
+    purok: Optional[str] = None
+    source: Optional[str] = None
+    valid_until: Optional[datetime] = None
+
+class AlertUpdate(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+    severity: Optional[Literal["info", "warning", "danger"]] = None
+    category: Optional[str] = None
+    barangay: Optional[str] = None
+    barangay_id: Optional[int] = None    # NEW
+    purok: Optional[str] = None
+    source: Optional[str] = None
+    valid_until: Optional[datetime] = None
+
+class AlertOut(BaseModel):
+    id: str
+    title: str
+    body: Optional[str] = None
+    severity: str
+    category: Optional[str] = None
+    barangay: Optional[str] = None
+    barangay_id: Optional[int] = None     # NEW (best-effort echo)
+    purok: Optional[str] = None
+    source: Optional[str] = None
+    valid_until: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+# ---------- Reads ----------
+class AlertReadIdsOut(BaseModel):
+    ids: List[str]
+
+# ---------- Preferences ----------
+class AlertPreferenceUpdate(BaseModel):
+    baha: Optional[bool] = None
+    bagyo: Optional[bool] = None
+    brownout: Optional[bool] = None
+    road: Optional[bool] = None
+    barangay: Optional[str] = None
+    barangay_id: Optional[int] = None     # NEW
+    silent_start_min: Optional[int] = None
+    silent_end_min: Optional[int] = None
+
+class AlertPreferenceOut(BaseModel):
+    baha: bool
+    bagyo: bool
+    brownout: bool
+    road: bool
+    barangay: Optional[str]
+    barangay_id: Optional[int] = None     # NEW
+    silent_start_min: Optional[int] = None
+    silent_end_min: Optional[int] = None

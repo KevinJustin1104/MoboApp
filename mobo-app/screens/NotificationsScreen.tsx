@@ -13,7 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { AuthContext } from "../context/AuthContext";
-import { listNotifications, markNotificationRead } from "../services/notifications";
+import { listNotifications, markNotificationRead } from "../services/notifications.api";
 
 type Notification = {
   id: string;

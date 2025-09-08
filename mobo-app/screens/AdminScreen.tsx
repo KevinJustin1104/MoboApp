@@ -147,6 +147,38 @@ export default function AdminScreen() {
     </View>
     </TouchableOpacity>
 
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.85}
+      onPress={() => navigation.navigate("AdminBarangays")}
+    >
+    <View style={styles.cardRow}>
+        <Ionicons name="business-outline" size={28} color="#e6f2ff" />
+        <View style={styles.cardBody}>
+        <Text style={styles.cardTitle}>Barangays</Text>
+        <Text style={styles.cardSubtitle}>
+            Manage barangays in the system
+        </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
+    </View>
+    </TouchableOpacity>
+ <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.85}
+      onPress={() => navigation.navigate("AdminCreateAlert")}
+    >
+    <View style={styles.cardRow}>
+        <Ionicons name="business-outline" size={28} color="#e6f2ff" />
+        <View style={styles.cardBody}>
+        <Text style={styles.cardTitle}>Alert</Text>
+        <Text style={styles.cardSubtitle}>
+            Manage barangays in the system
+        </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
+    </View>
+    </TouchableOpacity>
       {/* quick footer */}
       <View style={{ height: 40 }} />
     </ScrollView>
