@@ -13,6 +13,12 @@ from app.models import (
 from app.core.config import settings
 from app.api.api_v1.api import api_router
 
+from fastapi.staticfiles import StaticFiles
+import os
+
+UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 logger = logging.getLogger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -29,7 +35,7 @@ app.add_middleware(
 )
 app.include_router(api_router, prefix="/api/v1")
 
-
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 # helper to extract sqlite file path (if sqlite URL used)
 def _sqlite_filepath_from_url(url: str) -> str | None:
     if not url.startswith("sqlite"):

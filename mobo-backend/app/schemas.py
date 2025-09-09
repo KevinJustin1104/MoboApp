@@ -100,24 +100,48 @@ class NotificationOut(BaseModel):
     class Config:
         orm_mode = True
 
-
-# Announcement
+# --- Announcements ---
 class AnnouncementCreate(BaseModel):
     title: str
     body: str
     image_url: Optional[str] = None
 
+class AnnouncementUpdate(BaseModel):
+    title: Optional[str] = None
+    body: Optional[str] = None
+    image_url: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class AnnouncementOut(BaseModel):
     id: str
     title: str
     body: str
-    image_url: Optional[str]
+    image_url: Optional[str] = None
+    image_data_uri: Optional[str] = None  # <— base64 "data:image/...;base64,...."
     created_at: datetime
 
     class Config:
         orm_mode = True
 
+# --- Comments ---
+class AnnouncementCommentCreate(BaseModel):
+    comment: str
+    parent_id: Optional[str] = None
+
+class AnnouncementCommentOut(BaseModel):
+    id: str
+    author_id: Optional[str] = None
+    # NEW: show real name
+    author_name: Optional[str] = None
+    comment: str
+    created_at: datetime
+    parent_id: Optional[str] = None
+    replies: List["AnnouncementCommentOut"] = []
+
+    class Config:
+        orm_mode = True
+
+AnnouncementCommentOut.update_forward_refs()
 
 # Admin: status update payload
 class StatusUpdate(BaseModel):

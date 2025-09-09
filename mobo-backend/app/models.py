@@ -111,6 +111,15 @@ class Announcement(Base):
     author_id = Column(String(36), ForeignKey("users.id"))
     title = Column(String, nullable=False)
     body = Column(Text, nullable=False)
+
+    # NEW: store public URL for the hero image
+    image_url = Column(String, nullable=True)
+
+    comments = relationship(
+        "AnnouncementComment",
+        back_populates="announcement",
+        cascade="all, delete-orphan",
+    )
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
@@ -124,11 +133,31 @@ class AnnouncementImage(Base):
     url = Column(String, nullable=True)
 
 
+class AnnouncementComment(Base):
+    __tablename__ = "announcement_comments"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+
+    announcement_id = Column(String(36), ForeignKey("announcements.id", ondelete="CASCADE"), index=True)
+    announcement = relationship("Announcement", back_populates="comments")
+
+    author_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    # NEW: relationship so we can read the author's name
+    author = relationship("User")  # optionally: relationship("User", lazy="joined")
+
+    comment = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    parent_id = Column(String(36), ForeignKey("announcement_comments.id"), nullable=True)
+    parent = relationship("AnnouncementComment", remote_side=[id], backref="replies")
+
+
+
 class Notification(Base):
     __tablename__ = "notifications"
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     incident_id = Column(String(36), ForeignKey("incidents.id"), nullable=True)
+    announcements_id = Column(String(36), ForeignKey("announcements.id"), nullable=True)
     message = Column(Text, nullable=True)
     read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

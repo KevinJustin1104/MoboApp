@@ -1,159 +1,333 @@
-// src/screens/AdminAnnouncementsScreen.tsx
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
+  FlatList,
   TouchableOpacity,
   StyleSheet,
-  FlatList,
-  StatusBar,
-  TextInput,
-  Image,
-  ActivityIndicator,
   Alert,
+  ActivityIndicator,
+  Image,
+  TextInput,
   RefreshControl,
+  Platform,
+  SafeAreaView,
 } from "react-native";
-import * as ImagePicker from "expo-image-picker";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../navigation";
-
-type Announcement = { id: string; title: string; body: string; imageUri?: string };
-
-type NavProp = NativeStackNavigationProp<RootStackParamList, "AdminAnnouncements">;
+import client from "../services/api"; // axios instance with baseURL
+import { Announcement, getLatestAnnouncements, deleteAnnouncement } from "../services/announcements";
 
 export default function AdminAnnouncementsScreen() {
-  const navigation = useNavigation<NavProp>();
-  const [items, setItems] = useState<Announcement[]>(
-    Array.from({ length: 30 }).map((_, i) => ({ id: `A${i + 1}`, title: `Announcement ${i + 1}`, body: `This is announcement ${i + 1}` }))
-  );
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [imageUri, setImageUri] = useState<string | undefined>(undefined);
-  const [posting, setPosting] = useState(false);
+  const nav = useNavigation<any>();
+  const [items, setItems] = useState<Announcement[]>([]);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [query, setQuery] = useState("");
 
-  const pickImage = async () => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert("Permission required", "Please grant photo access to add an image.");
-      return;
-    }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.7, base64: false });
-    if (!res.canceled) {
-      setImageUri(res.assets?.[0].uri);
-    }
+  const API_BASE = (client.defaults.baseURL || "").replace(/\/$/, "");
+  const resolveImageUri = (a: Announcement) => {
+    if ((a as any).image_data_uri) return (a as any).image_data_uri as string; // prefer base64 data URI
+    if (a.image_url?.startsWith("http")) return a.image_url;
+    if (a.image_url?.startsWith("/")) return `${API_BASE}${a.image_url}`;
+    return null;
   };
 
-  const addAnnouncement = () => {
-    if (!title.trim() || !body.trim()) {
-      Alert.alert("Validation", "Title and body are required.");
-      return;
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await getLatestAnnouncements(100);
+      setItems(list);
+    } finally {
+      setLoading(false);
     }
-    setPosting(true);
-    // TODO: upload image + post to backend
-    setTimeout(() => {
-      const newItem: Announcement = { id: `A${Date.now()}`, title: title.trim(), body: body.trim(), imageUri };
-      setItems(prev => [newItem, ...prev]);
-      setTitle(""); setBody(""); setImageUri(undefined);
-      setPosting(false);
-    }, 700);
-  };
+  }, []);
 
-  const remove = (id: string) => {
-    // TODO: backend delete
-    setItems(prev => prev.filter(i => i.id !== id));
-  };
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const onRefresh = () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => {
-      // simulate refresh
-      setItems(prev => prev.slice(0, 30));
+    try {
+      await load();
+    } finally {
       setRefreshing(false);
-    }, 700);
+    }
+  }, [load]);
+
+  const onDelete = (id: string) => {
+    Alert.alert("Delete announcement", "This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteAnnouncement(id);
+            load();
+          } catch (e) {
+            Alert.alert("Error", "Failed to delete.");
+          }
+        },
+      },
+    ]);
   };
 
-  const renderItem = ({ item }: { item: Announcement }) => (
-    <View style={styles.annCard}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.annTitle}>{item.title}</Text>
-        <Text style={styles.annBody}>{item.body}</Text>
-        {item.imageUri ? <Image source={{ uri: item.imageUri }} style={styles.annImage} /> : null}
+  const filtered = useMemo(() => {
+    if (!query.trim()) return items;
+    const q = query.toLowerCase();
+    return items.filter((it) =>
+      it.title.toLowerCase().includes(q) || (it.body || "").toLowerCase().includes(q)
+    );
+  }, [items, query]);
+
+  const renderItem = ({ item }: { item: Announcement }) => {
+    const imgUri = resolveImageUri(item);
+    return (
+      <View style={styles.card}>
+        {/* Thumbnail */}
+        <TouchableOpacity
+          style={styles.thumbWrap}
+          activeOpacity={0.85}
+          onPress={() => nav.navigate("AnnouncementDetail", { announcementId: item.id })}
+          accessibilityRole="imagebutton"
+          accessibilityLabel={`Open ${item.title}`}
+        >
+          {imgUri ? (
+            <Image source={{ uri: imgUri }} style={styles.thumb} resizeMode="cover" />
+          ) : (
+            <View style={[styles.thumb, styles.thumbPlaceholder]}>
+              <Ionicons name="megaphone-outline" size={24} color="#4f46e5" />
+            </View>
+          )}
+        </TouchableOpacity>
+
+        {/* Content */}
+        <TouchableOpacity
+          style={styles.cardBody}
+          onPress={() => nav.navigate("AnnouncementDetail", { announcementId: item.id })}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+          {item.body ? <Text style={styles.snippet} numberOfLines={2}>{item.body}</Text> : null}
+          <Text style={styles.date}>{new Date(item.created_at).toLocaleString()}</Text>
+        </TouchableOpacity>
+
+        {/* Actions */}
+        <View style={styles.actions}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => nav.navigate("AdminAnnouncementEdit", { id: item.id })}
+            accessibilityLabel="Edit announcement"
+          >
+            <Ionicons name="create-outline" size={18} color="#0f172a" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.iconBtn, { backgroundColor: "#fff1f2" }]}
+            onPress={() => onDelete(item.id)}
+            accessibilityLabel="Delete announcement"
+          >
+            <Ionicons name="trash-outline" size={18} color="#ef4444" />
+          </TouchableOpacity>
+        </View>
       </View>
-      <TouchableOpacity style={styles.trash} onPress={() => remove(item.id)}>
-        <Ionicons name="trash-outline" size={20} color="#ef4444" />
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   return (
-    <View style={styles.screen}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f6f8fb" />
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={22} color="#0f172a" />
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Announcements</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <View style={styles.form}>
-        <TextInput placeholder="Title" value={title} onChangeText={setTitle} style={styles.input} />
-        <TextInput placeholder="Body" value={body} onChangeText={setBody} style={[styles.input, { height: 80 }]} multiline />
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <TouchableOpacity style={styles.imageBtn} onPress={pickImage}>
-            <Ionicons name="image-outline" size={18} color="#0369a1" />
-            <Text style={{ marginLeft: 8, color: "#0369a1", fontWeight: "700" }}>{imageUri ? "Change image" : "Add image"}</Text>
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => nav.goBack()} style={styles.backBtn} accessibilityLabel="Go back">
+            <Ionicons name="chevron-back" size={22} color="#0f172a" />
           </TouchableOpacity>
-
-          <TouchableOpacity style={[styles.addBtn, { marginLeft: 8 }]} onPress={addAnnouncement} disabled={posting}>
-            {posting ? <ActivityIndicator color="#fff" /> : <Text style={styles.addBtnText}>Post</Text>}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Announcements</Text>
+            <Text style={styles.headerSub}>Admin</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.primaryBtn}
+            onPress={() => nav.navigate("AdminAnnouncementEdit", { id: null })}
+            accessibilityLabel="Create announcement"
+          >
+            <Ionicons name="add" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 
-        {imageUri ? <Image source={{ uri: imageUri }} style={styles.preview} /> : null}
-      </View>
+        {/* Search */}
+        <View style={styles.searchRow}>
+          <Ionicons name="search-outline" size={18} color="#6b7280" />
+          <TextInput
+            placeholder="Search announcements"
+            style={styles.searchInput}
+            value={query}
+            onChangeText={setQuery}
+            returnKeyType="search"
+          />
+          {query.length > 0 && (
+            <TouchableOpacity onPress={() => setQuery("")} accessibilityLabel="Clear search">
+              <Ionicons name="close-circle" size={18} color="#9ca3af" />
+            </TouchableOpacity>
+          )}
+        </View>
 
-      <FlatList
-        data={items}
-        keyExtractor={i => i.id}
-        renderItem={renderItem}
-        contentContainerStyle={{ padding: 18, paddingBottom: 90 }}
-        initialNumToRender={10}
-        windowSize={10}
-        onEndReached={() => {
-          // simulate loading more
-          setItems(prev => [...prev, ...Array.from({ length: 20 }).map((_, i) => ({ id: `A-more-${prev.length + i}`, title: `Older ${prev.length + i}`, body: "older announcement" }))]);
-        }}
-        onEndReachedThreshold={0.4}
-        ListFooterComponent={() => <ActivityIndicator style={{ margin: 12 }} />}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      />
-    </View>
+        {/* List */}
+        {loading ? (
+          <ActivityIndicator style={{ marginTop: 24 }} />
+        ) : (
+          <FlatList
+            data={filtered}
+            keyExtractor={(i) => i.id}
+            contentContainerStyle={{ padding: 12, paddingBottom: 120 }}
+            renderItem={renderItem}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <View style={styles.emptyIcon}>
+                  <Ionicons name="document-text-outline" size={28} color="#64748b" />
+                </View>
+                <Text style={styles.emptyTitle}>No announcements</Text>
+                <Text style={styles.emptySub}>Create one using the + button.</Text>
+              </View>
+            }
+          />
+        )}
+
+        {/* Floating Create */}
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => nav.navigate("AdminAnnouncementEdit", { id: null })}
+          activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel="Create announcement"
+        >
+          <Ionicons name="add" size={24} color="#fff" />
+          <Text style={styles.fabText}>Create</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#f6f8fb" },
-  header: { flexDirection: "row", alignItems: "center", padding: 18 },
-  back: { flexDirection: "row", alignItems: "center", width: 90 },
-  backText: { marginLeft: 6, color: "#0f172a" },
-  title: { flex: 1, textAlign: "center", fontSize: 20, fontWeight: "700", color: "#0f172a" },
+  safe: { flex: 1, backgroundColor: "#f6f8fb" },
+  container: { flex: 1, backgroundColor: "#f6f8fb" },
 
-  form: { paddingHorizontal: 18, marginBottom: 12 },
-  input: { backgroundColor: "#fff", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#e6eef6", marginBottom: 8 },
-  imageBtn: { flexDirection: "row", alignItems: "center", padding: 10, borderRadius: 10, backgroundColor: "#eef2f6" },
-  addBtn: { backgroundColor: "#0369a1", padding: 10, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  addBtnText: { color: "#fff", fontWeight: "700" },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingTop: Platform.OS === "ios" ? 6 : 10,
+    paddingBottom: 10,
+    gap: 10 as any,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+  },
+  headerTitle: { fontWeight: "800", fontSize: 18, color: "#0f172a", lineHeight: 22 },
+  headerSub: { color: "#64748b", fontSize: 12 },
+  primaryBtn: {
+    backgroundColor: "#2563eb",
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 1,
+  },
 
-  preview: { marginTop: 10, width: "100%", height: 180, borderRadius: 10 },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    marginHorizontal: 12,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    gap: 8 as any,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: "#0f172a" },
 
-  annCard: { backgroundColor: "#fff", borderRadius: 12, padding: 12, marginBottom: 12, flexDirection: "row", alignItems: "flex-start" },
-  annTitle: { fontWeight: "700", fontSize: 15, color: "#0f172a" },
-  annBody: { color: "#64748b", marginTop: 6 },
-  annImage: { marginTop: 8, width: 120, height: 80, borderRadius: 8 },
-  trash: { padding: 8 },
+  card: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    padding: 10,
+    marginBottom: 10,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  thumbWrap: { width: 64, height: 64, borderRadius: 12, overflow: "hidden" },
+  thumb: { width: 64, height: 64, borderRadius: 12, backgroundColor: "#f1f5f9" },
+  thumbPlaceholder: {
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#eef2ff",
+  },
+  cardBody: { flex: 1, paddingHorizontal: 10 },
+  title: { fontWeight: "800", color: "#0f172a", fontSize: 15, marginBottom: 4 },
+  snippet: { color: "#475569", fontSize: 13, marginBottom: 6 },
+  date: { color: "#94a3b8", fontSize: 11 },
+
+  actions: { justifyContent: "space-between", alignItems: "center", gap: 6 as any },
+  iconBtn: {
+    backgroundColor: "#f8fafc",
+    padding: 8,
+    borderRadius: 10,
+    elevation: 0,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+
+  empty: { padding: 24, alignItems: "center" },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: "#e2e8f0",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  emptyTitle: { fontWeight: "800", color: "#0f172a", marginBottom: 4 },
+  emptySub: { color: "#6b7280" },
+
+  fab: {
+    position: "absolute",
+    right: 18,
+    bottom: 26,
+    backgroundColor: "#2563eb",
+    borderRadius: 28,
+    height: 52,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+    gap: 8 as any,
+  },
+  fabText: { color: "#fff", fontWeight: "800", fontSize: 14 },
 });

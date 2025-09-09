@@ -1,4 +1,5 @@
 # app/crud.py
+from collections import defaultdict
 from http.client import HTTPException
 from operator import or_
 import os
@@ -146,92 +147,90 @@ def list_incidents_for_user(db: Session, user_id: str, skip: int = 0, limit: int
     )
 
 
-def latest_announcements(db: Session, limit: int = 5) -> List[models.Announcement]:
-    """
-    Return active announcements ordered newest first.
-    Also attach image_url if an AnnouncementImage exists.
-    """
-    anns = (
+# --- Announcements ---
+def create_announcement(db: Session, author_id: str, title: str, body: str, image_url: Optional[str] = None):
+    a = models.Announcement(
+        id=str(__import__("uuid").uuid4()),
+        author_id=author_id,
+        title=title,
+        body=body,
+        image_url=image_url,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+    )
+    db.add(a)
+    db.commit()
+    db.refresh(a)
+    return a
+
+def update_announcement(db: Session, announcement_id: str, **fields):
+    a = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
+    if not a:
+        return None
+    for k, v in fields.items():
+        if v is not None:
+            setattr(a, k, v)
+    a.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(a)
+    return a
+
+def delete_announcement(db: Session, announcement_id: str) -> bool:
+    a = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
+    if not a:
+        return False
+    db.delete(a)
+    db.commit()
+    return True
+
+def get_announcement_by_id(db: Session, announcement_id: str):
+    return db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
+
+def latest_announcements(db: Session, limit: int = 5):
+    return (
         db.query(models.Announcement)
-        .filter(models.Announcement.is_active == True)
         .order_by(models.Announcement.created_at.desc())
         .limit(limit)
         .all()
     )
 
-    # attach image_url from announcement_images if present
-    for a in anns:
-        img = (
-            db.query(models.AnnouncementImage)
-            .filter(models.AnnouncementImage.announcement_id == a.id)
-            .order_by(models.AnnouncementImage.id)  # you can change ordering
-            .first()
-        )
-        if img:
-            # if you store file path, expose relative static URL
-            # convert storage_path -> /uploads/<basename>
-            a.image_url = img.url or ("/uploads/" + os.path.basename(img.storage_path))
-        else:
-            a.image_url = None
-    return anns
-
-
-def create_announcement(
-    db: Session,
-    author_id: str,
-    title: str,
-    body: str,
-    image_storage_path: Optional[str] = None,
-) -> models.Announcement:
-    """
-    Create announcement; optionally create AnnouncementImage row and attach 'image_url'
-    to the returned object.
-    """
-    a = models.Announcement(author_id=author_id, title=title, body=body)
-    db.add(a)
+# --- Comments ---
+def create_announcement_comment(db: Session, announcement_id: str, author_id: Optional[str], comment: str, parent_id: Optional[str] = None):
+    c = models.AnnouncementComment(
+        id=str(__import__("uuid").uuid4()),
+        announcement_id=announcement_id,
+        author_id=author_id,
+        comment=comment,
+        parent_id=parent_id,
+        created_at=datetime.utcnow(),
+    )
+    db.add(c)
     db.commit()
-    db.refresh(a)
-
-    if image_storage_path:
-        # store AnnouncementImage; url is exposed to client as /uploads/<filename>
-        from os.path import basename
-
-        url = "/uploads/" + basename(image_storage_path)
-        ai = models.AnnouncementImage(
-            announcement_id=a.id,
-            storage_path=image_storage_path,
-            url=url,
-        )
-        db.add(ai)
-        db.commit()
-        db.refresh(ai)
-        # attach image_url property for serialization
-        a.image_url = ai.url
-    else:
-        a.image_url = None
-
-    return a
+    db.refresh(c)
+    return c
 
 
-def get_announcement_by_id(
-    db: Session, announcement_id: str
-) -> Optional[models.Announcement]:
-    a = (
-        db.query(models.Announcement)
-        .filter(models.Announcement.id == announcement_id)
-        .first()
+def list_announcement_comments(db: Session, announcement_id: str) -> List[models.AnnouncementComment]:
+    return (
+        db.query(models.AnnouncementComment)
+        .options(joinedload(models.AnnouncementComment.author))  # NEW
+        .filter(models.AnnouncementComment.announcement_id == announcement_id)
+        .order_by(models.AnnouncementComment.created_at.asc())
+        .all()
     )
-    if not a:
-        return None
-    img = (
-        db.query(models.AnnouncementImage)
-        .filter(models.AnnouncementImage.announcement_id == a.id)
-        .order_by(models.AnnouncementImage.id)
-        .first()
-    )
-    a.image_url = img.url if img else None
-    return a
 
+def build_comment_tree(flat: List[models.AnnouncementComment]):
+    by_id = {c.id: c for c in flat}
+    # Prepare reply containers
+    for c in flat:
+        c.replies = []  # type: ignore
+    roots = []
+    for c in flat:
+        if c.parent_id and c.parent_id in by_id:
+            by_id[c.parent_id].replies.append(c)  # type: ignore
+        else:
+            roots.append(c)
+    return roots
 
 def get_incident(db: Session, incident_id: str):
     return db.query(models.Incident).filter(models.Incident.id == incident_id).first()
@@ -357,9 +356,9 @@ def add_incident_photo(
 
 
 # Announcements
-def create_announcement(
-    db: Session, author_id: str, title: str, body: str, image_url: Optional[str] = None
-):
+# --- Announcements ---
+
+def create_announcement(db: Session, author_id: str, title: str, body: str, image_url: Optional[str] = None):
     a = models.Announcement(
         id=str(__import__("uuid").uuid4()),
         author_id=author_id,
@@ -375,6 +374,32 @@ def create_announcement(
     return a
 
 
+def update_announcement(db: Session, announcement_id: str, **fields):
+    a = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
+    if not a:
+        return None
+    for k, v in fields.items():
+        if v is not None:
+            setattr(a, k, v)
+    a.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(a)
+    return a
+
+
+def delete_announcement(db: Session, announcement_id: str) -> bool:
+    a = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
+    if not a:
+        return False
+    db.delete(a)
+    db.commit()
+    return True
+
+
+def get_announcement_by_id(db: Session, announcement_id: str):
+    return db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
+
+
 def latest_announcements(db: Session, limit: int = 5):
     return (
         db.query(models.Announcement)
@@ -382,6 +407,54 @@ def latest_announcements(db: Session, limit: int = 5):
         .limit(limit)
         .all()
     )
+
+# --- Comments ---
+
+def create_announcement_comment(db: Session, announcement_id: str, author_id: Optional[str], comment: str, parent_id: Optional[str] = None):
+    c = models.AnnouncementComment(
+        id=str(__import__("uuid").uuid4()),
+        announcement_id=announcement_id,
+        author_id=author_id,
+        comment=comment,
+        parent_id=parent_id,
+        created_at=datetime.utcnow(),
+    )
+    db.add(c)
+    db.commit()
+    db.refresh(c)
+    return c
+
+
+def list_announcement_comments(db: Session, announcement_id: str) -> List[models.AnnouncementComment]:
+    return (
+        db.query(models.AnnouncementComment)
+        .options(
+            joinedload(models.AnnouncementComment.author)  # eager-load the user
+        )
+        .filter(models.AnnouncementComment.announcement_id == announcement_id)
+        .order_by(models.AnnouncementComment.created_at.asc())
+        .all()
+    )
+
+
+def build_comment_tree(flat: List[models.AnnouncementComment]) -> List[schemas.AnnouncementCommentOut]:
+    # Pure builder (no ORM mutation)
+    children = defaultdict(list)
+    for c in flat:
+        children[c.parent_id].append(c)
+
+    def to_out(c: models.AnnouncementComment) -> schemas.AnnouncementCommentOut:
+        return schemas.AnnouncementCommentOut(
+            id=c.id,
+            author_id=c.author_id,
+            comment=c.comment,
+            created_at=c.created_at,
+            parent_id=c.parent_id,
+            replies=[to_out(x) for x in children.get(c.id, [])],
+        )
+
+    roots = [c for c in flat if c.parent_id is None]
+    return [to_out(c) for c in roots]
 
 
 # Notifications

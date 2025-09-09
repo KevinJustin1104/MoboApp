@@ -33,6 +33,7 @@ import AdminCategoryIncidentsScreen from "../screens/AdminCategoryIncidentsScree
 import AdminCreateDepartmentStaff from "../screens/AdminCreateDepartmentStaff";
 import AdminBarangaysScreen from "../screens/AdminBarangaysScreen";
 import AdminCreateAlertScreen from "../screens/AdminCreateAlertScreen";
+import AdminAnnouncementEditScreen from "../screens/AdminAnnouncementEditScreen";
 
 export type RootStackParamList = {
   /* Auth */
@@ -61,13 +62,14 @@ export type RootStackParamList = {
   /* Admin */
   Admin: undefined;
   AdminIncidents: undefined;
-  AdminAnnouncements: undefined;
   AdminUsers: undefined;
   AdminDepartment: undefined;
   AdminCategoryIncidents: undefined;
   AdminCreateDepartmentStaff: undefined;
   AdminBarangays: undefined; 
   AdminCreateAlert: undefined;  // NEW
+  AdminAnnouncements: undefined;
+  AdminAnnouncementEdit: { id: string | null };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -99,6 +101,8 @@ export default function RootNavigation() {
         <Stack.Screen name="AdminCreateDepartmentStaff" component={AdminCreateDepartmentStaff} />
         <Stack.Screen name="AdminBarangays" component={AdminBarangaysScreen} />
         <Stack.Screen name="AdminCreateAlert" component={AdminCreateAlertScreen} />
+        <Stack.Screen name="AdminAnnouncementEdit" component={AdminAnnouncementEditScreen} />
+              <Stack.Screen name="AnnouncementDetail" component={AnnouncementDetailScreen} />
 {/* NEW */}
 
       </Stack.Navigator>
