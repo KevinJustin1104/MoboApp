@@ -34,6 +34,16 @@ import AdminCreateDepartmentStaff from "../screens/AdminCreateDepartmentStaff";
 import AdminBarangaysScreen from "../screens/AdminBarangaysScreen";
 import AdminCreateAlertScreen from "../screens/AdminCreateAlertScreen";
 import AdminAnnouncementEditScreen from "../screens/AdminAnnouncementEditScreen";
+import BookAppointmentScreen from "../screens/BookAppointmentScreen";
+import AppointmentSuccessScreen from "../screens/AppointmentSuccessScreen";
+import MyAppointmentsScreen from "../screens/MyAppointmentsScreen";
+import AdminAppointmentsHubScreen from "../screens/AdminAppointmentsHubScreen";
+import AdminAppointmentServiceCreateScreen from "../screens/AdminAppointmentServiceCreateScreen";
+import AdminAppointmentSchedulesCreateScreen from "../screens/AdminAppointmentSchedulesCreateScreen";
+import AdminWindowsScreen from "../screens/AdminWindowsScreen";
+import AdminWindowDetailScreen from "../screens/AdminWindowDetailScreen";
+import AdminCheckinScreen from "../screens/AdminCheckinScreen";
+
 
 export type RootStackParamList = {
   /* Auth */
@@ -70,6 +80,24 @@ export type RootStackParamList = {
   AdminCreateAlert: undefined;  // NEW
   AdminAnnouncements: undefined;
   AdminAnnouncementEdit: { id: string | null };
+
+  BookAppointment: undefined; 
+  AppointmentSuccess: undefined;  // NEW
+  MyAppointments: undefined;
+
+  AdminAppointmentsHub: undefined;
+  AdminAppointmentServiceCreate: undefined;
+  AdminAppointmentSchedulesCreate: undefined;
+   AdminWindows: undefined;
+  AdminWindowDetail: {
+    window: {
+      id: number;
+      department_id: number;
+      name: string;
+      is_open: boolean;
+    };
+  };
+  AdminCheckin: undefined; 
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -102,8 +130,13 @@ export default function RootNavigation() {
         <Stack.Screen name="AdminBarangays" component={AdminBarangaysScreen} />
         <Stack.Screen name="AdminCreateAlert" component={AdminCreateAlertScreen} />
         <Stack.Screen name="AdminAnnouncementEdit" component={AdminAnnouncementEditScreen} />
-              <Stack.Screen name="AnnouncementDetail" component={AnnouncementDetailScreen} />
-{/* NEW */}
+        <Stack.Screen name="AnnouncementDetail" component={AnnouncementDetailScreen} />
+        <Stack.Screen name="AdminAppointmentsHub" component={AdminAppointmentsHubScreen} />
+        <Stack.Screen name="AdminAppointmentServiceCreate" component={AdminAppointmentServiceCreateScreen} />
+        <Stack.Screen name="AdminAppointmentSchedulesCreate" component={AdminAppointmentSchedulesCreateScreen} />
+        <Stack.Screen name="AdminWindows" component={AdminWindowsScreen} />
+        <Stack.Screen name="AdminWindowDetail" component={AdminWindowDetailScreen} />
+        <Stack.Screen name="AdminCheckin" component={AdminCheckinScreen} options={{ headerShown: false }} />
 
       </Stack.Navigator>
     );
@@ -126,6 +159,10 @@ export default function RootNavigation() {
       <Stack.Screen name="Alerts" component={AlertsScreen} />
       <Stack.Screen name="AlertDetail" component={AlertDetailScreen} />
       <Stack.Screen name="AlertSettings" component={AlertSettingsScreen} />
+
+      <Stack.Screen name="BookAppointment" component={BookAppointmentScreen} />
+      <Stack.Screen name="AppointmentSuccess" component={AppointmentSuccessScreen} />
+      <Stack.Screen name="MyAppointments" component={MyAppointmentsScreen} />
     </Stack.Navigator>
   );
 }

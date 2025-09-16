@@ -1,5 +1,5 @@
 // src/screens/HomeScreen.tsx
-import React, { useContext, useMemo, useCallback, useState, useEffect, useRef } from "react";
+import React, { useContext, useMemo, useCallback, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   Platform,
   AccessibilityInfo,
   ActivityIndicator,
-  AppState, // 👈 added
+  AppState,
 } from "react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -21,6 +21,7 @@ import { getUnreadCount } from "../services/notifications";
 import { getLatestAnnouncements, Announcement } from "../services/announcements";
 import { getUnreadAlertsCount } from "../services/alert";
 import { useTranslation } from "react-i18next";
+import { myCurrentAppointment, type Appointment } from "../services/appointments";
 
 type HomeNavProp = NativeStackNavigationProp<RootStackParamList, "Home">;
 
@@ -33,6 +34,17 @@ export default function HomeScreen() {
   const [unreadAlerts, setUnreadAlerts] = useState<number>(0);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(false);
+
+  // NEW: show "current booking" quick entry
+  const [currentAppt, setCurrentAppt] = useState<Appointment | null>(null);
+  const fetchCurrentAppt = useCallback(async () => {
+    try {
+      const appt = await myCurrentAppointment();
+      setCurrentAppt(appt);
+    } catch {
+      setCurrentAppt(null);
+    }
+  }, []);
 
   const fetchUnread = useCallback(async () => {
     try {
@@ -67,40 +79,42 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Existing: refresh when screen is focused
+  // Refresh when screen is focused
   useFocusEffect(
     useCallback(() => {
       fetchUnread();
       fetchAlertsUnread();
       fetchAnnouncements();
-    }, [fetchUnread, fetchAlertsUnread, fetchAnnouncements])
+      fetchCurrentAppt(); // 👈 also refresh current booking on focus
+    }, [fetchUnread, fetchAlertsUnread, fetchAnnouncements, fetchCurrentAppt])
   );
 
-  // NEW: Live auto-refresh loop (no manual refresh needed)
+  // Live auto-refresh loop (notifications/alerts + current booking)
   useEffect(() => {
     let stopped = false;
     let timer: any;
 
     const tick = async () => {
       if (stopped) return;
-      // Run both requests in parallel
       try {
-        const [notif, alerts] = await Promise.all([
+        const [notif, alerts, appt] = await Promise.all([
           getUnreadCount().catch(() => 0),
           getUnreadAlertsCount().catch(() => 0),
+          myCurrentAppointment().catch(() => null),
         ]);
         if (!stopped) {
           setUnreadNotifCount(notif);
           setUnreadAlerts(alerts);
+          setCurrentAppt(appt);
         }
       } catch {
-        // ignore errors; next loop will try again
+        // ignore; next loop will retry
       }
     };
 
     const schedule = () => {
       const hidden = typeof document !== "undefined" && (document as any).hidden;
-      const next = hidden ? 60_000 : 30_000; // slow down when backgrounded on web
+      const next = hidden ? 60_000 : 30_000;
       timer = setTimeout(loop, next);
     };
 
@@ -109,26 +123,20 @@ export default function HomeScreen() {
       if (!stopped) schedule();
     };
 
-    // Start immediately
     loop();
 
-    // Refresh when tab gains focus (web)
     const onWindowFocus = () => tick();
     if (typeof window !== "undefined") {
       window.addEventListener("focus", onWindowFocus);
     }
 
-    // Refresh when tab visibility changes to visible (web)
     const onVisibility = () => {
-      if (typeof document !== "undefined" && !(document as any).hidden) {
-        tick();
-      }
+      if (typeof document !== "undefined" && !(document as any).hidden) tick();
     };
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", onVisibility);
     }
 
-    // Refresh when app returns to foreground (native)
     const appStateSub = AppState.addEventListener("change", (state) => {
       if (state === "active") tick();
     });
@@ -136,13 +144,9 @@ export default function HomeScreen() {
     return () => {
       stopped = true;
       clearTimeout(timer);
-      if (typeof window !== "undefined") {
-        window.removeEventListener("focus", onWindowFocus);
-      }
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisibility);
-      }
-      // @ts-ignore RN types: remove() exists on the subscription
+      if (typeof window !== "undefined") window.removeEventListener("focus", onWindowFocus);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
+      // @ts-ignore
       appStateSub?.remove?.();
     };
   }, []);
@@ -198,6 +202,13 @@ export default function HomeScreen() {
         onPress: () => navigation.navigate("SettingsLanguage" as never),
         color: "#f1f5f9",
       },
+      {
+        id: "appointments",
+        label: t("common.appointments", "Appointments & E-Queue"),
+        icon: "calendar-outline" as const,
+        onPress: () => navigation.navigate("BookAppointment" as never),
+        color: "#eaf7ff",
+      },
     ],
     [navigation, t]
   );
@@ -211,7 +222,7 @@ export default function HomeScreen() {
             <Image
               source={{ uri: "https://placehold.co/56x56/1E40AF/ffffff?text=U" }}
               style={styles.avatar}
-              resizeMode="cover" // 👈 move resizeMode to prop to avoid RN Web warning
+              resizeMode="cover"
             />
           </View>
           <View style={{ marginLeft: 12 }}>
@@ -242,6 +253,33 @@ export default function HomeScreen() {
         <Text style={styles.bannerTitle}>Mobo Citizen Services</Text>
         <Text style={styles.bannerSubtitle}>Quick access to local services and reporting tools</Text>
       </View>
+
+      {/* NEW: Quick jump to current booking */}
+      {currentAppt ? (
+        <TouchableOpacity
+          style={styles.currentBookingBtn}
+          onPress={() =>
+            navigation.navigate("AppointmentSuccess" as any, { appt: currentAppt } as any)
+          }
+          activeOpacity={0.9}
+          accessibilityRole="button"
+          accessibilityLabel="Go to my current booking"
+        >
+          <View style={styles.cbLeftIcon}>
+            <Ionicons name="qr-code-outline" size={22} color="#1e40af" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cbTitle}>Your current booking</Text>
+            <Text style={styles.cbSub}>
+              {new Date(currentAppt.slot_start).toLocaleString([], {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#334155" />
+        </TouchableOpacity>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.grid}>
@@ -349,8 +387,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  // You can remove resizeMode here to silence RN Web warning
-  avatar: { width: 56, height: 56 /*, resizeMode: "cover"*/ },
+  avatar: { width: 56, height: 56 },
   greeting: { fontSize: 12, color: "#6b7280" },
   username: { fontSize: 16, color: "#0f172a", fontWeight: "600" },
 
@@ -397,6 +434,34 @@ const styles = StyleSheet.create({
   },
   bannerTitle: { color: "#0f172a", fontSize: 16, fontWeight: "700", marginBottom: 6 },
   bannerSubtitle: { color: "#6b7280", fontSize: 13 },
+
+  // NEW styles for the current booking pill
+  currentBookingBtn: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  cbLeftIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#EAF0FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  cbTitle: { color: "#0f172a", fontWeight: "800" },
+  cbSub: { color: "#64748b", marginTop: 2, fontSize: 12 },
 
   content: { paddingHorizontal: 16, paddingBottom: 120 },
   grid: {

@@ -14,6 +14,270 @@ from app.core.security import hash_password
 import base64
 from sqlalchemy import func, or_    
 
+
+def list_services(db: Session, department_id: int | None = None):
+    q = db.query(models.AppointmentService).filter(models.AppointmentService.is_active == True)
+    if department_id:
+        q = q.filter(models.AppointmentService.department_id == department_id)
+    return q.order_by(models.AppointmentService.name.asc()).all()
+
+def list_schedules(db: Session, service_id: int):
+    return (
+        db.query(models.ServiceSchedule)
+        .filter(models.ServiceSchedule.service_id == service_id)
+        .all()
+    )
+
+def count_booked_in_slot(db: Session, service_id: int, slot_start: datetime, slot_end: datetime):
+    return (
+        db.query(models.Appointment)
+        .filter(
+            models.Appointment.service_id == service_id,
+            models.Appointment.slot_start == slot_start,
+            models.Appointment.slot_end == slot_end,
+            models.Appointment.status.in_(["booked", "checked_in", "serving"]),
+        )
+        .count()
+    )
+
+def create_appointment(db: Session, user_id: str, service: models.AppointmentService,
+                       slot_start: datetime, slot_end: datetime, notes: str | None):
+    a = models.Appointment(
+        user_id=user_id,
+        service_id=service.id,
+        department_id=service.department_id,
+        slot_date=datetime(slot_start.year, slot_start.month, slot_start.day),
+        slot_start=slot_start,
+        slot_end=slot_end,
+        status="booked",
+        notes=notes,
+    )
+    db.add(a)
+    db.commit()
+    db.refresh(a)
+    return a
+
+def get_appointment(db: Session, appt_id: str):
+    return db.query(models.Appointment).filter(models.Appointment.id == appt_id).first()
+
+def cancel_appointment(db: Session, appt: models.Appointment):
+    if appt.status in ["done", "no_show"]:
+        return False
+    appt.status = "cancelled"
+    appt.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(appt)
+    return True
+
+def assign_queue_number(db: Session, appt: models.Appointment):
+    # Normalize date to midnight
+    qdate = datetime(appt.slot_start.year, appt.slot_start.month, appt.slot_start.day)
+    # Compute next number for department/date
+    max_num = (
+        db.query(func.max(models.QueueTicket.number))
+        .filter(
+            models.QueueTicket.department_id == appt.department_id,
+            models.QueueTicket.date == qdate,
+        )
+        .scalar()
+    ) or 0
+    next_num = max_num + 1
+
+    ticket = models.QueueTicket(
+        department_id=appt.department_id,
+        service_id=appt.service_id,
+        date=qdate,
+        number=next_num,
+        appointment_id=appt.id,
+        status="waiting",
+    )
+    db.add(ticket)
+
+    appt.queue_number = next_num
+    appt.queue_date = qdate
+    appt.status = "checked_in"
+    appt.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(appt)
+    db.refresh(ticket)
+    return ticket
+
+def list_services(db: Session, department_id: int | None = None):
+    q = db.query(models.AppointmentService).filter(models.AppointmentService.is_active == True)
+    if department_id:
+        q = q.filter(models.AppointmentService.department_id == department_id)
+    return q.order_by(models.AppointmentService.name.asc()).all()
+
+def list_schedules(db: Session, service_id: int):
+    return (
+        db.query(models.ServiceSchedule)
+        .filter(models.ServiceSchedule.service_id == service_id)
+        .all()
+    )
+
+def count_booked_in_slot(db: Session, service_id: int, slot_start: datetime, slot_end: datetime):
+    return (
+        db.query(models.Appointment)
+        .filter(
+            models.Appointment.service_id == service_id,
+            models.Appointment.slot_start == slot_start,
+            models.Appointment.slot_end == slot_end,
+            models.Appointment.status.in_(["booked", "checked_in", "serving"]),
+        )
+        .count()
+    )
+
+def create_appointment(db: Session, user_id: str, service: models.AppointmentService,
+                       slot_start: datetime, slot_end: datetime, notes: str | None):
+    a = models.Appointment(
+        user_id=user_id,
+        service_id=service.id,
+        department_id=service.department_id,
+        slot_date=datetime(slot_start.year, slot_start.month, slot_start.day),
+        slot_start=slot_start,
+        slot_end=slot_end,
+        status="booked",
+        notes=notes,
+    )
+    db.add(a)
+    db.commit()
+    db.refresh(a)
+    return a
+
+def get_appointment(db: Session, appt_id: str):
+    return db.query(models.Appointment).filter(models.Appointment.id == appt_id).first()
+
+def cancel_appointment(db: Session, appt: models.Appointment):
+    if appt.status in ["done", "no_show"]:
+        return False
+    appt.status = "cancelled"
+    appt.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(appt)
+    return True
+
+def assign_queue_number(db: Session, appt: models.Appointment):
+    # Normalize date to midnight
+    qdate = datetime(appt.slot_start.year, appt.slot_start.month, appt.slot_start.day)
+    # Compute next number for department/date
+    max_num = (
+        db.query(func.max(models.QueueTicket.number))
+        .filter(
+            models.QueueTicket.department_id == appt.department_id,
+            models.QueueTicket.date == qdate,
+        )
+        .scalar()
+    ) or 0
+    next_num = max_num + 1
+
+    ticket = models.QueueTicket(
+        department_id=appt.department_id,
+        service_id=appt.service_id,
+        date=qdate,
+        number=next_num,
+        appointment_id=appt.id,
+        status="waiting",
+    )
+    db.add(ticket)
+
+    appt.queue_number = next_num
+    appt.queue_date = qdate
+    appt.status = "checked_in"
+    appt.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(appt)
+    db.refresh(ticket)
+    return ticket
+
+def queue_now(db: Session, department_id: int):
+    # Now serving = min ticket with status 'serving'
+    # Waiting = count of 'waiting'
+    today = datetime.utcnow()
+    qdate = datetime(today.year, today.month, today.day)
+
+    waiting = (
+        db.query(models.QueueTicket)
+        .filter(
+            models.QueueTicket.department_id == department_id,
+            models.QueueTicket.date == qdate,
+            models.QueueTicket.status == "waiting",
+        )
+        .count()
+    )
+
+    serving = (
+        db.query(models.QueueTicket)
+        .filter(
+            models.QueueTicket.department_id == department_id,
+            models.QueueTicket.date == qdate,
+            models.QueueTicket.status == "serving",
+        )
+        .order_by(models.QueueTicket.number.asc())
+        .first()
+    )
+    now_serving = serving.number if serving else None
+
+    return qdate, now_serving, waiting
+
+def call_next_ticket(db: Session, department_id: int, window_id: int):
+    today = datetime.utcnow()
+    qdate = datetime(today.year, today.month, today.day)
+
+    # pick the lowest waiting
+    next_ticket = (
+        db.query(models.QueueTicket)
+        .filter(
+            models.QueueTicket.department_id == department_id,
+            models.QueueTicket.date == qdate,
+            models.QueueTicket.status == "waiting",
+        )
+        .order_by(models.QueueTicket.number.asc(), models.QueueTicket.created_at.asc())
+        .first()
+    )
+    if not next_ticket:
+        return None
+
+    next_ticket.status = "serving"
+    next_ticket.called_at = datetime.utcnow()
+    next_ticket.window_id = window_id
+
+    # sync appointment if present
+    if next_ticket.appointment_id:
+        appt = db.query(models.Appointment).get(next_ticket.appointment_id)
+        if appt:
+            appt.status = "serving"
+            appt.window_id = window_id
+            appt.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(next_ticket)
+    return next_ticket
+
+def close_ticket(db: Session, ticket_id: str, outcome: str):
+    t = db.query(models.QueueTicket).get(ticket_id)
+    if not t:
+        return None
+    if outcome == "done":
+        t.status = "done"
+        t.served_at = datetime.utcnow()
+        if t.appointment_id:
+            appt = db.query(models.Appointment).get(t.appointment_id)
+            if appt:
+                appt.status = "done"
+                appt.updated_at = datetime.utcnow()
+    elif outcome == "no_show":
+        t.status = "no_show"
+        if t.appointment_id:
+            appt = db.query(models.Appointment).get(t.appointment_id)
+            if appt:
+                appt.status = "no_show"
+                appt.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(t)
+    return t 
+
 # Users
 def create_user(
     db: Session, name: str, email: str, password: str, phone: str | None, role_id: int

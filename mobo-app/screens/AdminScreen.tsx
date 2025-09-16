@@ -26,31 +26,48 @@ export default function AdminScreen() {
       showsVerticalScrollIndicator={false}
     >
       <StatusBar barStyle="dark-content" backgroundColor="#f6f8fb" />
+
       {/* Header */}
       <View style={styles.headerRow}>
-
         <Text style={styles.headerTitle}>Admin Dashboard</Text>
 
         <View style={styles.headerRight}>
-            <TouchableOpacity
+          <TouchableOpacity
             onPress={async () => {
-                await signOut();          // clear token and role
-                navigation.reset({        // reset navigation stack to Login
+              await signOut();
+              navigation.reset({
                 index: 0,
                 routes: [{ name: "Login" }],
-                });
+              });
             }}
             style={styles.iconBtn}
-            >
+          >
             <Ionicons name="log-out-outline" size={22} color="#0f172a" />
-            </TouchableOpacity>
-
+          </TouchableOpacity>
         </View>
       </View>
 
       <Text style={styles.lead}>Manage incidents, announcements and users</Text>
 
-      {/* Action cards */}
+      {/* Appointments (NEW) */}
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate("AdminAppointmentsHub")}
+      >
+        <View style={styles.cardRow}>
+          <Ionicons name="calendar-outline" size={28} color="#1e40af" />
+          <View style={styles.cardBody}>
+            <Text style={styles.cardTitle}>Appointments</Text>
+            <Text style={styles.cardSubtitle}>
+              Create services and define weekly schedules/slots
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
+        </View>
+      </TouchableOpacity>
+
+      {/* Incidents */}
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.85}
@@ -60,12 +77,15 @@ export default function AdminScreen() {
           <Ionicons name="document-text-outline" size={28} color="#0369a1" />
           <View style={styles.cardBody}>
             <Text style={styles.cardTitle}>Incidents</Text>
-            <Text style={styles.cardSubtitle}>View and update user-submitted incidents</Text>
+            <Text style={styles.cardSubtitle}>
+              View and update user-submitted incidents
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
         </View>
       </TouchableOpacity>
 
+      {/* Announcements */}
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.85}
@@ -75,12 +95,15 @@ export default function AdminScreen() {
           <Ionicons name="megaphone-outline" size={28} color="#065f46" />
           <View style={styles.cardBody}>
             <Text style={styles.cardTitle}>Announcements</Text>
-            <Text style={styles.cardSubtitle}>Post, edit, or delete public announcements</Text>
+            <Text style={styles.cardSubtitle}>
+              Post, edit, or delete public announcements
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
         </View>
       </TouchableOpacity>
 
+      {/* Users */}
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.85}
@@ -90,95 +113,115 @@ export default function AdminScreen() {
           <Ionicons name="people-outline" size={28} color="#7c3aed" />
           <View style={styles.cardBody}>
             <Text style={styles.cardTitle}>Users</Text>
-            <Text style={styles.cardSubtitle}>Browse registered users and their details</Text>
+            <Text style={styles.cardSubtitle}>
+              Browse registered users and their details
+            </Text>
           </View>
           <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
         </View>
       </TouchableOpacity>
 
-    <TouchableOpacity
-    style={styles.card}
-    activeOpacity={0.85}
-    onPress={() => navigation.navigate("AdminDepartment")}
-    >
-    <View style={styles.cardRow}>
-        <Ionicons name="business-outline" size={28} color="#7c3aed" />
+      {/* Departments */}
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate("AdminDepartment")}
+      >
+        <View style={styles.cardRow}>
+          <Ionicons name="business-outline" size={28} color="#7c3aed" />
           <View style={styles.cardBody}>
-          <Text style={styles.cardTitle}>Departments</Text>
-          <Text style={styles.cardSubtitle}>
+            <Text style={styles.cardTitle}>Departments</Text>
+            <Text style={styles.cardSubtitle}>
               Browse all departments and their incident categories
-          </Text>
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
         </View>
-        <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
-    </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
 
-    <TouchableOpacity
-    style={styles.card}
-    activeOpacity={0.85}
-    onPress={() => navigation.navigate("AdminCategoryIncidents")}
-    >
-    <View style={styles.cardRow}>
-        <Ionicons name="alert-circle-outline" size={28} color="#0369a1" />
-        <View style={styles.cardBody}>
-        <Text style={styles.cardTitle}>Incidents Category</Text>
-        <Text style={styles.cardSubtitle}>
-            View all incident categories linked to their departments
-        </Text>
+      {/* Incident Categories */}
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate("AdminCategoryIncidents")}
+      >
+        <View style={styles.cardRow}>
+          <Ionicons name="alert-circle-outline" size={28} color="#0369a1" />
+          <View style={styles.cardBody}>
+            <Text style={styles.cardTitle}>Incidents Category</Text>
+            <Text style={styles.cardSubtitle}>
+              View all incident categories linked to their departments
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
         </View>
-        <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
-    </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
 
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.85}
-      onPress={() => navigation.navigate("AdminCreateDepartmentStaff")}
-    >
-    <View style={styles.cardRow}>
-        <Ionicons name="person-add-outline" size={28} color="#0369a1" />
-        <View style={styles.cardBody}>
-        <Text style={styles.cardTitle}>Create Department Staff</Text>
-        <Text style={styles.cardSubtitle}>
-            Create new staff accounts for department management
-        </Text>
+      {/* Create Department Staff */}
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate("AdminCreateDepartmentStaff")}
+      >
+        <View style={styles.cardRow}>
+          <Ionicons name="person-add-outline" size={28} color="#0369a1" />
+          <View style={styles.cardBody}>
+            <Text style={styles.cardTitle}>Create Department Staff</Text>
+            <Text style={styles.cardSubtitle}>
+              Create new staff accounts for department management
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
         </View>
-        <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
-    </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
 
-    <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.85}
-      onPress={() => navigation.navigate("AdminBarangays")}
-    >
-    <View style={styles.cardRow}>
-        <Ionicons name="business-outline" size={28} color="#e6f2ff" />
-        <View style={styles.cardBody}>
-        <Text style={styles.cardTitle}>Barangays</Text>
-        <Text style={styles.cardSubtitle}>
-            Manage barangays in the system
-        </Text>
+      {/* Barangays */}
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate("AdminBarangays")}
+      >
+        <View style={styles.cardRow}>
+          <Ionicons name="business-outline" size={28} color="#1e40af" />
+          <View style={styles.cardBody}>
+            <Text style={styles.cardTitle}>Barangays</Text>
+            <Text style={styles.cardSubtitle}>Manage barangays in the system</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
         </View>
-        <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
-    </View>
-    </TouchableOpacity>
- <TouchableOpacity
-      style={styles.card}
-      activeOpacity={0.85}
-      onPress={() => navigation.navigate("AdminCreateAlert")}
-    >
-    <View style={styles.cardRow}>
-        <Ionicons name="business-outline" size={28} color="#e6f2ff" />
-        <View style={styles.cardBody}>
-        <Text style={styles.cardTitle}>Alert</Text>
-        <Text style={styles.cardSubtitle}>
-            Manage barangays in the system
-        </Text>
+      </TouchableOpacity>
+
+      {/* Alerts */}
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate("AdminCreateAlert")}
+      >
+        <View style={styles.cardRow}>
+          <Ionicons name="warning-outline" size={28} color="#dc2626" />
+          <View style={styles.cardBody}>
+            <Text style={styles.cardTitle}>Alert</Text>
+            <Text style={styles.cardSubtitle}>Send real-time alerts to citizens</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
         </View>
-        <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
-    </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+      
+      <TouchableOpacity
+        style={styles.card}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate("AdminWindows")}
+      >
+        <View style={styles.cardRow}>
+          <Ionicons name="scan-outline" size={28} color="#0f172a" />
+          <View style={styles.cardBody}>
+            <Text style={styles.cardTitle}>Windows / Counters</Text>
+            <Text style={styles.cardSubtitle}>Create, open/close, and manage queue</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={22} color="#94a3b8" />
+        </View>
+      </TouchableOpacity>
+
       {/* quick footer */}
       <View style={{ height: 40 }} />
     </ScrollView>

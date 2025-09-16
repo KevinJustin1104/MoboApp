@@ -10,8 +10,10 @@ from app.api.api_v1.endpoints import (
     departments,
     incident_categories,
     admin_staff,
-    alerts
-
+    alerts,
+    appointments,
+    admin_appointments,
+    officeWindow,
 )
 
 api_router = APIRouter()
@@ -36,3 +38,6 @@ api_router.include_router(
 api_router.include_router(admin_staff.router)
 api_router.include_router(barangays.router, prefix="/barangays", tags=["barangays"])
 api_router.include_router(alerts.router, prefix="/alerts", tags=["alerts"])
+api_router.include_router(appointments.router, prefix="/appointments", tags=["appointments"])
+api_router.include_router(admin_appointments.router, prefix="/admin_appointments", tags=["admin_appointments"])
+api_router.include_router(officeWindow.router, prefix="/officeWindow", tags=["officeWindow"])

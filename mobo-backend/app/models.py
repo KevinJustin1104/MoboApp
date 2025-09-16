@@ -1,10 +1,8 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Integer, UniqueConstraint
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Integer, UniqueConstraint, Time, Index, Date
 from sqlalchemy.orm import relationship
-from datetime import datetime
 from app.db.base import Base
-
-
+from datetime import datetime, date, time
 class Role(Base):
     __tablename__ = "roles"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -154,13 +152,38 @@ class AnnouncementComment(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
+
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
-    incident_id = Column(String(36), ForeignKey("incidents.id"), nullable=True)
-    announcements_id = Column(String(36), ForeignKey("announcements.id"), nullable=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+
+    # What kind of notif is this?
+    # 'system' | 'announcement' | 'incident' | 'alert' | 'appointment' | 'queue'
+    type = Column(String, nullable=False, default="system")
+    title = Column(String, nullable=True)
     message = Column(Text, nullable=True)
-    read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Optional foreign keys to jump the user directly to context
+    incident_id = Column(String(36), ForeignKey("incidents.id"), nullable=True, index=True)
+    # normalize: use singular; we’ll keep migration to rename if needed
+    announcement_id = Column(String(36), ForeignKey("announcements.id"), nullable=True, index=True)
+    alert_id = Column(String(36), ForeignKey("alerts.id"), nullable=True, index=True)
+
+    # NEW for appointments & queue
+    appointment_id = Column(String(36), ForeignKey("appointments.id"), nullable=True, index=True)
+    queue_ticket_id = Column(String(36), ForeignKey("queue_tickets.id"), nullable=True, index=True)
+
+    # Delivery & read tracking
+    read = Column(Boolean, default=False, index=True)      # kept for backward compatibility
+    read_at = Column(DateTime, nullable=True)
+    delivered_at = Column(DateTime, nullable=True)
+    scheduled_at = Column(DateTime, nullable=True)
+
+    # Freeform JSON payload as string (SQLite-friendly)
+    data = Column(Text, nullable=True)       # JSON-encoded string
+    action = Column(String, nullable=True)   # e.g. "open_appointment"
+    deeplink = Column(String, nullable=True) # e.g. "mobo://appointments/<id>"
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 class Barangay(Base):
@@ -221,3 +244,127 @@ class AlertPreference(Base):
     # "silent hours" (minutes since midnight, 0..1439)
     silent_start_min = Column(Integer, nullable=True)
     silent_end_min = Column(Integer, nullable=True)
+
+
+class AppointmentService(Base):
+    __tablename__ = "appointment_services"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String, nullable=False, unique=True)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)
+    description = Column(Text, nullable=True)
+
+    # core knobs
+    duration_min = Column(Integer, nullable=False, default=15)          # default slot length
+    capacity_per_slot = Column(Integer, nullable=False, default=1)      # how many people per slot
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    department = relationship("Department")
+
+class AppointmentSchedule(Base):
+    __tablename__ = "appointment_schedules"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    service_id = Column(Integer, ForeignKey("appointment_services.id", ondelete="CASCADE"), nullable=False)
+
+    # 0=Mon .. 6=Sun
+    day_of_week = Column(Integer, nullable=False)
+
+    # opening window for the day
+    start_time = Column(Time, nullable=False)
+    end_time   = Column(Time, nullable=False)
+
+    # override defaults (optional)
+    slot_minutes = Column(Integer, nullable=True)
+    capacity_per_slot = Column(Integer, nullable=True)
+
+    # optional validity range
+    valid_from = Column(Date, nullable=True)
+    valid_to   = Column(Date, nullable=True)
+
+    timezone = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        # avoid exact duplicates
+        UniqueConstraint("service_id", "day_of_week", "start_time", "end_time", name="uq_sched_window"),
+        Index("ix_schedules_service_dow", "service_id", "day_of_week"),
+    )
+class OfficeWindow(Base):
+    """
+    A counter/window that serves the queue for a department.
+    """
+    __tablename__ = "office_windows"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)  # e.g., "Window 1"
+    is_open = Column(Boolean, default=False)
+    department = relationship("Department")
+
+class Appointment(Base):
+    __tablename__ = "appointments"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    service_id = Column(Integer, ForeignKey("appointment_services.id"), nullable=False, index=True)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False, index=True)
+
+    # chosen slot
+    slot_date = Column(DateTime, nullable=False)      # date part used (00:00 local)
+    slot_start = Column(DateTime, nullable=False)     # exact start time
+    slot_end = Column(DateTime, nullable=False)       # exact end time
+
+    # status: booked | cancelled | checked_in | serving | done | no_show
+    status = Column(String, nullable=False, default="booked")
+    notes = Column(Text, nullable=True)
+
+    # Assigned on check-in
+    queue_number = Column(Integer, nullable=True, index=True)  # per dept per date
+    queue_date = Column(DateTime, nullable=True)               # normalized date when queued
+    window_id = Column(Integer, ForeignKey("office_windows.id"), nullable=True)
+
+    # secure token for QR validation
+    qr_token = Column(String, nullable=False, default=lambda: str(uuid.uuid4()))
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+    service = relationship("AppointmentService")
+    department = relationship("Department")
+    window = relationship("OfficeWindow")
+
+    __table_args__ = (
+        # prevent double booking on exact slot by same user
+        UniqueConstraint("user_id", "service_id", "slot_start", name="uq_user_service_slot"),
+    )
+
+class QueueTicket(Base):
+    """
+    Optional explicit ticket table; also useful for walk-ins.
+    We will create one automatically on check-in for an Appointment.
+    """
+    __tablename__ = "queue_tickets"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False, index=True)
+    service_id = Column(Integer, ForeignKey("appointment_services.id"), nullable=True, index=True)
+    date = Column(DateTime, nullable=False, index=True)  # normalized date (00:00)
+    number = Column(Integer, nullable=False)             # incrementing per dept/date
+    appointment_id = Column(String(36), ForeignKey("appointments.id"), nullable=True)
+    window_id = Column(Integer, ForeignKey("office_windows.id"), nullable=True)
+
+    # status: waiting | serving | done | no_show
+    status = Column(String, nullable=False, default="waiting")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    called_at = Column(DateTime, nullable=True)
+    served_at = Column(DateTime, nullable=True)
+
+    department = relationship("Department")
+    service = relationship("AppointmentService")
+    appointment = relationship("Appointment")
+    window = relationship("OfficeWindow")
+
+    __table_args__ = (
+        UniqueConstraint("department_id", "date", "number", name="uq_queue_dept_date_num"),
+    )

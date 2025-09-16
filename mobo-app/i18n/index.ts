@@ -20,6 +20,8 @@ const en = {
     settings: "Settings",
     openNotifications: "Open notifications",
     reportIncidentA11y: "Report an incident",
+    appointments: "Appointments",
+    appointmentsEQueue: "Appointments & E-Queue"
   },
   sos: {
     header: "Emergency Contacts",
