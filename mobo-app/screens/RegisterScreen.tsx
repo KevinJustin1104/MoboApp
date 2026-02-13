@@ -1,6 +1,7 @@
 // mobo-app/screens/RegisterScreen.tsx
 import React from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useForm, Controller } from "react-hook-form";
 import { register as registerService } from "../services/auth";
 import { useNavigation } from "@react-navigation/native";
@@ -15,7 +16,7 @@ export default function RegisterScreen() {
 
   const onSubmit = async (data: FormData) => {
     try {
-      const user = await registerService(data.name.trim(), data.email.trim(), data.password, data.phone?.trim());
+      const user = await registerService(data.name.trim(), data.email.trim(), data.password, data.phone?.trim() || null, "user");
       Alert.alert("Registered", "Account created successfully. Please sign in.");
       navigation.navigate("Login");
     } catch (err: any) {
@@ -26,6 +27,12 @@ export default function RegisterScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <TouchableOpacity
+        style={styles.backBtn}
+        onPress={() => navigation.canGoBack() && navigation.goBack()}
+      >
+        <Ionicons name="chevron-back" size={24} color="#1e293b" />
+      </TouchableOpacity>
       <View style={styles.card}>
         <Text style={styles.title}>Create account</Text>
 
@@ -94,4 +101,5 @@ const styles = StyleSheet.create({
   errorText: { color: "#ef4444", fontSize: 12, marginBottom: 8 },
   button: { backgroundColor: "#0284c7", padding: 14, borderRadius: 8, alignItems: "center" },
   buttonText: { color: "#fff", fontWeight: "700" },
+  backBtn: { position: "absolute", top: 50, left: 16, zIndex: 10, padding: 8 },
 });

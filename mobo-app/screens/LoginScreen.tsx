@@ -15,6 +15,8 @@ import {
   Pressable,
 } from "react-native";
 import { useForm, Controller } from "react-hook-form";
+import { useNavigation } from "@react-navigation/native";
+import { Ionicons } from "@expo/vector-icons";
 import { AuthContext } from "../context/AuthContext";
 import { register as registerService } from "../services/auth";
 
@@ -27,6 +29,7 @@ export default function LoginScreen() {
     defaultValues: { name: "", email: "", password: "", confirmPassword: "", phone: "" },
   });
 
+  const navigation = useNavigation<any>();
   const { signIn, isLoading } = useContext(AuthContext);
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -60,6 +63,12 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.canGoBack() && navigation.goBack()}
+        >
+          <Ionicons name="chevron-back" size={24} color="#1e293b" />
+        </TouchableOpacity>
         <View style={styles.card}>
             <Text style={styles.title}>Mobo</Text>
             <Text style={styles.subtitle}>{mode === "login" ? "Sign in to continue" : "Create an account"}</Text>
@@ -161,4 +170,5 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: "#e6eef8", borderRadius: 12, padding: 12, marginBottom: 10, color: "#0f172a", fontSize: 14 },
   button: { backgroundColor: "#0284c7", padding: 14, borderRadius: 12, alignItems: "center", marginTop: 6 },
   buttonText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  backBtn: { position: "absolute", top: 50, left: 16, zIndex: 10, padding: 8 },
 });

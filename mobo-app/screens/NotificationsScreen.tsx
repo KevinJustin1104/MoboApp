@@ -55,8 +55,9 @@ export default function NotificationsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      fetchNotifications();
-    }, [fetchNotifications])
+      if (userToken) fetchNotifications();
+      else setLoading(false);
+    }, [fetchNotifications, userToken])
   );
 
   const onRefresh = async () => {
@@ -158,12 +159,36 @@ export default function NotificationsScreen() {
     </TouchableOpacity>
   );
 
+  if (!userToken) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={22} color="#1e293b" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          <View style={styles.headerAction} />
+        </View>
+        <View style={styles.guestBox}>
+          <Ionicons name="notifications-off-outline" size={56} color="#94a3b8" />
+          <Text style={styles.guestTitle}>Create your account</Text>
+          <Text style={styles.guestSub}>Sign in to view your notifications and stay updated.</Text>
+          <TouchableOpacity style={styles.guestBtn} onPress={() => navigation.navigate("Login")}>
+            <Text style={styles.guestBtnText}>Sign in</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.guestLink} onPress={() => navigation.navigate("Register")}>
+            <Text style={styles.guestLinkText}>Create account</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color="#0f172a" />
+          <Ionicons name="chevron-back" size={22} color="#1e293b" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Notifications</Text>
         <TouchableOpacity onPress={clearAll} style={styles.headerAction}>
@@ -215,4 +240,12 @@ const styles = StyleSheet.create({
   emptyBox: { justifyContent: "center", alignItems: "center" },
   emptyTitle: { marginTop: 12, fontSize: 16, fontWeight: "700", color: "#0f172a" },
   emptySubtitle: { color: "#6b7280", marginTop: 6, textAlign: "center" },
+
+  guestBox: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 24 },
+  guestTitle: { marginTop: 16, fontSize: 18, fontWeight: "700", color: "#1e293b", textAlign: "center" },
+  guestSub: { marginTop: 8, fontSize: 14, color: "#64748b", textAlign: "center" },
+  guestBtn: { marginTop: 20, backgroundColor: "#7c3aed", paddingVertical: 12, paddingHorizontal: 32, borderRadius: 12 },
+  guestBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  guestLink: { marginTop: 12 },
+  guestLinkText: { color: "#7c3aed", fontWeight: "600", fontSize: 15 },
 });
