@@ -67,12 +67,15 @@ export default function AnnouncementsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color="#0f172a" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Announcements</Text>
+        {navigation.canGoBack() ? (
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="chevron-back" size={22} color="#1e293b" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.backBtn} />
+        )}
+        <Text style={styles.headerTitle}>News</Text>
         <View style={{ width: 36 }} />
       </View>
 
